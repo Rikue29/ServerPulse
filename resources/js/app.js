@@ -1,7 +1,18 @@
 import './bootstrap';
+import '../css/app.css';
 
-import Alpine from 'alpinejs';
+import { createRoot } from 'react-dom/client'
+import { createInertiaApp } from '@inertiajs/react'
+import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers'
 
-window.Alpine = Alpine;
-
-Alpine.start();
+createInertiaApp({
+    title: (title) => `${title} - ServerPulse`,
+    resolve: (name) => resolvePageComponent(`./Pages/${name}.jsx`, import.meta.glob('./Pages/**/*.jsx')),
+    setup({ el, App, props }) {
+        const root = createRoot(el);
+        root.render(<App {...props} />);
+    },
+    progress: {
+        color: '#4B5563',
+    },
+});
