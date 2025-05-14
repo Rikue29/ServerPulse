@@ -10,18 +10,52 @@ use Illuminate\Support\Facades\Log;
 
 class ServerMonitoringService
 {
+    // Add properties to cache metrics and reduce load when polling frequently
+    private $lastLocalMetricsTimestamp = 0;
+    private $cachedLocalMetrics = null;
+    private $lastRemoteMetricsTimestamp = [];
+    private $cachedRemoteMetrics = [];
+    
+    // Cache threshold in seconds - don't poll more frequently than this
+    private $localCacheThreshold = 2; // For local server
+    private $remoteCacheThreshold = 4; // For remote servers
+
     /**
      * Get server metrics via SSH
      */
     public function getMetrics(Server $server)
     {
         try {
-            Log::info("[Monitoring] Attempting SSH to {$server->ip_address}:{$server->ssh_port} as {$server->ssh_user}");
             // For local testing, we'll use direct commands instead of SSH
             if ($this->isLocalhost($server->ip_address)) {
-                return $this->getLocalMetrics();
+                // Check if we need fresh metrics or can use cached ones
+                $currentTime = time();
+                if ($this->cachedLocalMetrics !== null && 
+                    ($currentTime - $this->lastLocalMetricsTimestamp) < $this->localCacheThreshold) {
+                    Log::info("[Monitoring] Using cached metrics for localhost (last updated " . 
+                              ($currentTime - $this->lastLocalMetricsTimestamp) . " seconds ago)");
+                    return $this->cachedLocalMetrics;
+                }
+                
+                $metrics = $this->getLocalMetrics();
+                $this->cachedLocalMetrics = $metrics;
+                $this->lastLocalMetricsTimestamp = $currentTime;
+                return $metrics;
+            }
+            
+            // For remote servers, check cache first
+            $serverId = $server->id;
+            $currentTime = time();
+            if (isset($this->cachedRemoteMetrics[$serverId]) && 
+                isset($this->lastRemoteMetricsTimestamp[$serverId]) && 
+                ($currentTime - $this->lastRemoteMetricsTimestamp[$serverId]) < $this->remoteCacheThreshold) {
+                Log::info("[Monitoring] Using cached metrics for {$server->ip_address} (last updated " . 
+                          ($currentTime - $this->lastRemoteMetricsTimestamp[$serverId]) . " seconds ago)");
+                return $this->cachedRemoteMetrics[$serverId];
             }
 
+            Log::info("[Monitoring] Attempting SSH to {$server->ip_address}:{$server->ssh_port} as {$server->ssh_user}");
+            
             // For remote servers, use SSH
             $ssh = new SSH2($server->ip_address, $server->ssh_port ?? 22);
             
@@ -77,7 +111,8 @@ class ServerMonitoringService
             $loadAvg = trim($ssh->exec("uptime | awk -F'load average:' '{print $2}'"));
 
             Log::info("[Monitoring] Metrics for {$server->ip_address}: CPU={$cpu}, RAM={$memoryUsage}, DISK={$diskUsage}");
-            return [
+            
+            $metrics = [
                 'cpu_usage' => floatval($cpu),
                 'ram_usage' => floatval($memoryUsage),
                 'disk_usage' => floatval($diskUsage),
@@ -85,14 +120,31 @@ class ServerMonitoringService
                 'uptime' => $uptime,
                 'load_average' => $loadAvg
             ];
+            
+            // Cache the metrics for this server
+            $this->cachedRemoteMetrics[$server->id] = $metrics;
+            $this->lastRemoteMetricsTimestamp[$server->id] = time();
+            
+            return $metrics;
         } catch (Exception $e) {
-            return [
+            $errorMetrics = [
                 'cpu_usage' => 0,
                 'ram_usage' => 0,
                 'disk_usage' => 0,
                 'status' => 'offline',
                 'error' => $e->getMessage()
             ];
+            
+            // Cache even error results to avoid hammering servers that are down
+            if (!$this->isLocalhost($server->ip_address)) {
+                $this->cachedRemoteMetrics[$server->id] = $errorMetrics;
+                $this->lastRemoteMetricsTimestamp[$server->id] = time();
+            } else {
+                $this->cachedLocalMetrics = $errorMetrics;
+                $this->lastLocalMetricsTimestamp = time();
+            }
+            
+            return $errorMetrics;
         }
     }
 
@@ -102,7 +154,7 @@ class ServerMonitoringService
     private function getLocalMetrics()
     {
         try {
-            // Get CPU usage using PowerShell
+            // Get CPU usage using PowerShell - use lighter commands for faster response
             $cpu = shell_exec('powershell "Get-WmiObject Win32_Processor | Measure-Object -Property LoadPercentage -Average | Select-Object -ExpandProperty Average"');
             $cpuUsage = floatval(trim($cpu));
 
@@ -146,4 +198,4 @@ class ServerMonitoringService
     {
         return in_array($ip, ['127.0.0.1', 'localhost', '::1']);
     }
-} 
+}
