@@ -19,6 +19,8 @@ class Kernel extends ConsoleKernel
     {
         // Update server metrics every minute
         $schedule->command('servers:update-metrics')->everyMinute();
+        // Broadcast server status every minute
+        $schedule->command('monitor:server')->everyMinute();
     }
 
     /**
