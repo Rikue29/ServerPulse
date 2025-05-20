@@ -113,7 +113,7 @@
 <body>
     <div class="container">
         <div class="left">
-            <img src="{{ asset('images/company-logo.png') }}" alt="Company Logo" class="logo" />
+            <img src="{{ asset('images/company-logo.jpg') }}" alt="Company Logo" class="logo" />
         </div>
         <div class="right">
             <div class="login-box">
