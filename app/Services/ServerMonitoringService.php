@@ -6,6 +6,7 @@ use App\Models\Server;
 use phpseclib3\Net\SSH2;
 use phpseclib3\Crypt\PublicKeyLoader;
 use Exception;
+use Illuminate\Support\Facades\Log;
 
 class ServerMonitoringService
 {
@@ -15,6 +16,7 @@ class ServerMonitoringService
     public function getMetrics(Server $server)
     {
         try {
+            Log::info("[Monitoring] Attempting SSH to {$server->ip_address}:{$server->ssh_port} as {$server->ssh_user}");
             // For local testing, we'll use direct commands instead of SSH
             if ($this->isLocalhost($server->ip_address)) {
                 return $this->getLocalMetrics();
@@ -33,6 +35,7 @@ class ServerMonitoringService
             }
 
             if (!$success) {
+                Log::error("[Monitoring] SSH login failed for {$server->ip_address} as {$server->ssh_user}");
                 throw new Exception('SSH login failed');
             }
 
@@ -73,6 +76,7 @@ class ServerMonitoringService
             $uptime = trim($ssh->exec('uptime -p'));
             $loadAvg = trim($ssh->exec("uptime | awk -F'load average:' '{print $2}'"));
 
+            Log::info("[Monitoring] Metrics for {$server->ip_address}: CPU={$cpu}, RAM={$memoryUsage}, DISK={$diskUsage}");
             return [
                 'cpu_usage' => floatval($cpu),
                 'ram_usage' => floatval($memoryUsage),
