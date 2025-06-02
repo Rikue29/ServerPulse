@@ -103,11 +103,11 @@
         <div class="pt-4 pb-3 border-t border-gray-200">
             <div class="flex items-center px-4">
                 <div class="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                    <span class="text-blue-600 font-medium">{{ substr(Auth::user()->name, 0, 1) }}</span>
+                    <span class="text-blue-600 font-medium">{{ Auth::user() ? substr(Auth::user()->name, 0, 1) : 'T' }}</span>
                 </div>
                 <div class="ml-3">
-                    <div class="text-base font-medium text-gray-800">{{ Auth::user()->name }}</div>
-                    <div class="text-sm font-medium text-gray-500">{{ Auth::user()->email }}</div>
+                    <div class="text-base font-medium text-gray-800">{{ Auth::user()->name ?? 'Test User' }}</div>
+                    <div class="text-sm font-medium text-gray-500">{{ Auth::user()->email ?? 'test@example.com' }}</div>
                 </div>
             </div>
             <div class="mt-3 space-y-1">
