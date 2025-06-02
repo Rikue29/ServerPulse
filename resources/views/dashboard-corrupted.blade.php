@@ -1,7 +1,7 @@
 @extends('layouts.app')
 
 @section('content')
-<div class="min-h-screen bg-gray-50">
+<div class="sidebar-margin min-h-screen bg-gray-50">
     <!-- Header -->
     <div class="bg-white border-b border-gray-200 px-6 py-4">
         <div class="flex items-center justify-between">
@@ -14,55 +14,122 @@
                     <div class="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></div>
                     {{ $servers->count() }} servers online
                 </div>
-                <a href="{{ route('servers.create') }}" 
-                   class="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors duration-200">
-                    <i class="fas fa-plus mr-2"></i>Add Server
-                </a>
             </div>
         </div>
     </div>
 
     <!-- Content Area -->
-    <div class="p-6">
-        <!-- Quick Stats -->
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                <div class="flex items-center justify-between">
-                    <div>
-                        <p class="text-sm font-medium text-gray-600">Total Servers</p>
-                        <p class="text-2xl font-bold text-gray-900">{{ $servers->count() }}</p>
+                    }
+                }
+            }
+        }
+    </script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        .glass-effect {
+            background: rgba(255, 255, 255, 0.25);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.18);
+        }
+        .sidebar-margin {
+            margin-left: 16rem;
+        }
+        @media (max-width: 1024px) {
+            .sidebar-margin {
+                margin-left: 0;
+            }
+        }
+        .pulse-animation {
+            animation: pulse-glow 2s infinite;
+        }
+        @keyframes pulse-glow {
+            0%, 100% {
+                opacity: 1;
+                transform: scale(1);
+            }
+            50% {
+                opacity: 0.7;
+                transform: scale(1.1);
+            }
+        }
+        .fade-in-up {
+            animation: fadeInUp 0.6s ease-out forwards;
+            opacity: 0;
+            transform: translateY(20px);
+        }
+        
+        @keyframes fadeInUp {
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        
+        .hover-scale {
+            transition: transform 0.2s ease-in-out;
+        }
+        
+        .hover-scale:hover {
+            transform: scale(1.02);
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <!-- Include Sidebar Navigation -->
+    @include('layouts.navigation')
+    
+    <!-- Main Content with Sidebar Margin -->
+    <div class="sidebar-margin min-h-screen">
+        <!-- Header -->
+        <div class="bg-white border-b border-gray-200 px-6 py-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h1 class="text-2xl font-semibold text-gray-900">Dashboard</h1>
+                    <p class="text-sm text-gray-500 mt-1">Monitor your servers and their performance</p>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <div class="flex items-center space-x-2 text-green-600">
+                        <div class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                        <span class="text-sm font-medium">Live Monitoring</span>
                     </div>
-                    <div class="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                        <i class="fas fa-server text-blue-600 text-xl"></i>
+                    <a href="{{ route('servers.create') }}" 
+                       class="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors duration-200">
+                        <i class="fas fa-plus mr-2"></i>Add Server
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <div class="p-6">
+            <!-- Quick Stats -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow duration-200 fade-in-up">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-sm font-medium text-gray-600">Total Servers</p>
+                            <p class="text-2xl font-bold text-gray-900">{{ \App\Models\Server::count() }}</p>
+                        </div>
+                        <div class="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                            <i class="fas fa-server text-blue-600 text-xl"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow duration-200 fade-in-up" style="animation-delay: 0.1s">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-sm font-medium text-gray-600">Active Alerts</p>
+                            <p class="text-2xl font-bold text-red-600">{{ \App\Models\Log::where('level', 'error')->count() }}</p>
+                        </div>
+                        <div class="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
+                            <i class="fas fa-exclamation-triangle text-red-600 text-xl"></i>
                     </div>
                 </div>
             </div>
 
-            <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                <div class="flex items-center justify-between">
-                    <div>
-                        <p class="text-sm font-medium text-gray-600">Online Servers</p>
-                        <p class="text-2xl font-bold text-green-600">{{ $servers->where('status', 'online')->count() }}</p>
-                    </div>
-                    <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                        <i class="fas fa-check-circle text-green-600 text-xl"></i>
-                    </div>
-                </div>
-            </div>
-
-            <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                <div class="flex items-center justify-between">
-                    <div>
-                        <p class="text-sm font-medium text-gray-600">Active Alerts</p>
-                        <p class="text-2xl font-bold text-red-600">{{ \App\Models\Log::where('level', 'error')->count() }}</p>
-                    </div>
-                    <div class="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
-                        <i class="fas fa-exclamation-triangle text-red-600 text-xl"></i>
-                    </div>
-                </div>
-            </div>
-
-            <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 hover-scale fade-in-up" style="animation-delay: 0.3s">
                 <div class="flex items-center justify-between">
                     <div>
                         <p class="text-sm font-medium text-gray-600">Warnings</p>
@@ -73,12 +140,24 @@
                     </div>
                 </div>
             </div>
+
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 hover-scale fade-in-up" style="animation-delay: 0.4s">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm font-medium text-gray-600">Uptime</p>
+                        <p class="text-2xl font-bold text-green-600">99.9%</p>
+                    </div>
+                    <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+                        <i class="fas fa-check-circle text-green-600 text-xl"></i>
+                    </div>
+                </div>
+            </div>
         </div>
 
-        <!-- Quick Actions and Recent Activity -->
+        <!-- Quick Actions -->
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
             <!-- Server Management -->
-            <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 fade-in-up" style="animation-delay: 0.5s">
                 <div class="flex items-center justify-between mb-6">
                     <h3 class="text-lg font-semibold text-gray-900 flex items-center">
                         <i class="fas fa-server text-blue-600 mr-2"></i>
@@ -115,13 +194,13 @@
             </div>
 
             <!-- Recent Activity -->
-            <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 fade-in-up" style="animation-delay: 0.6s">
                 <div class="flex items-center justify-between mb-6">
                     <h3 class="text-lg font-semibold text-gray-900 flex items-center">
                         <i class="fas fa-clock text-purple-600 mr-2"></i>
                         Recent Activity
                     </h3>
-                    <a href="{{ route('logs.index') }}" class="text-purple-600 hover:text-purple-700 text-sm font-medium">
+                    <a href="{{ route('logs') }}" class="text-purple-600 hover:text-purple-700 text-sm font-medium">
                         View All <i class="fas fa-arrow-right ml-1"></i>
                     </a>
                 </div>
@@ -162,7 +241,7 @@
         </div>
 
         <!-- System Status -->
-        <div class="mt-8 bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <div class="mt-8 bg-white rounded-xl shadow-sm border border-gray-100 p-6 fade-in-up" style="animation-delay: 0.7s">
             <h3 class="text-lg font-semibold text-gray-900 mb-6 flex items-center">
                 <i class="fas fa-chart-line text-indigo-600 mr-2"></i>
                 System Status Overview
@@ -209,13 +288,13 @@
                 </div>
             </div>
         </div>
-    </div>
-</div>
+    </main>
 
-<script>
-    // Auto-refresh page every 30 seconds
-    setTimeout(function() {
-        window.location.reload();
-    }, 30000);
-</script>
-@endsection
+    <script>
+        // Auto-refresh page every 30 seconds
+        setTimeout(function() {
+            window.location.reload();
+        }, 30000);
+    </script>
+</body>
+</html>

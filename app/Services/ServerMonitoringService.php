@@ -3,10 +3,11 @@
 namespace App\Services;
 
 use App\Models\Server;
+use App\Models\AlertThreshold;
+use App\Models\Log; // This is your Eloquent Log model
 use phpseclib3\Net\SSH2;
 use phpseclib3\Crypt\PublicKeyLoader;
 use Exception;
-use Illuminate\Support\Facades\Log;
 
 class ServerMonitoringService
 {
@@ -16,33 +17,28 @@ class ServerMonitoringService
     public function getMetrics(Server $server)
     {
         try {
-            Log::info("[Monitoring] Attempting SSH to {$server->ip_address}:{$server->ssh_port} as {$server->ssh_user}");
-            // For local testing, we'll use direct commands instead of SSH
+            // Use info logging only if you need it, e.g.:
+            // \Illuminate\Support\Facades\Log::info("[Monitoring] Attempting SSH to {$server->ip_address}:{$server->ssh_port} as {$server->ssh_user}");
             if ($this->isLocalhost($server->ip_address)) {
                 return $this->getLocalMetrics();
             }
 
-            // For remote servers, use SSH
             $ssh = new SSH2($server->ip_address, $server->ssh_port ?? 22);
             
-            // Try to connect with SSH key first
             if (!empty($server->ssh_key)) {
                 $key = PublicKeyLoader::load($server->ssh_key);
                 $success = $ssh->login($server->ssh_user, $key);
             } else {
-                // Fall back to password authentication
                 $success = $ssh->login($server->ssh_user, $server->ssh_password);
             }
 
             if (!$success) {
-                Log::error("[Monitoring] SSH login failed for {$server->ip_address} as {$server->ssh_user}");
+                // \Illuminate\Support\Facades\Log::error("[Monitoring] SSH login failed for {$server->ip_address} as {$server->ssh_user}");
                 throw new Exception('SSH login failed');
             }
 
-            // Detect Linux distribution
             $distro = strtolower(trim($ssh->exec('cat /etc/os-release | grep -w "ID" | cut -d= -f2')));
 
-            // Get CPU usage based on distribution
             switch ($distro) {
                 case 'ubuntu':
                 case 'debian':
@@ -51,32 +47,26 @@ class ServerMonitoringService
                     $cpu = trim($ssh->exec("top -bn1 | grep 'Cpu(s)' | awk '{print $2}'"));
                     break;
                 default:
-                    // Fallback method that works on most Linux systems
                     $cpu = trim($ssh->exec("grep 'cpu ' /proc/stat | awk '{usage=($2+$4)*100/($2+$4+$5)} END {print usage}'"));
             }
             
-            // Get memory usage (works on most Linux distributions)
             $memInfo = $ssh->exec('free');
             if (strpos($memInfo, 'available') !== false) {
-                // Modern versions of free command
                 $memoryTotal = trim($ssh->exec("free | grep Mem | awk '{print $2}'"));
                 $memoryAvailable = trim($ssh->exec("free | grep Mem | awk '{print $7}'"));
                 $memoryUsage = ($memoryTotal - $memoryAvailable) / $memoryTotal * 100;
             } else {
-                // Older versions
                 $memoryTotal = trim($ssh->exec("free | grep Mem | awk '{print $2}'"));
                 $memoryUsed = trim($ssh->exec("free | grep Mem | awk '{print $3}'"));
                 $memoryUsage = ($memoryUsed / $memoryTotal) * 100;
             }
 
-            // Get disk usage (works on all Linux distributions)
             $diskUsage = trim($ssh->exec("df / | tail -1 | awk '{print $5}' | sed 's/%//'"));
 
-            // Get additional system information
             $uptime = trim($ssh->exec('uptime -p'));
             $loadAvg = trim($ssh->exec("uptime | awk -F'load average:' '{print $2}'"));
 
-            Log::info("[Monitoring] Metrics for {$server->ip_address}: CPU={$cpu}, RAM={$memoryUsage}, DISK={$diskUsage}");
+            // \Illuminate\Support\Facades\Log::info("[Monitoring] Metrics for {$server->ip_address}: CPU={$cpu}, RAM={$memoryUsage}, DISK={$diskUsage}");
             return [
                 'cpu_usage' => floatval($cpu),
                 'ram_usage' => floatval($memoryUsage),
@@ -102,15 +92,12 @@ class ServerMonitoringService
     private function getLocalMetrics()
     {
         try {
-            // Get CPU usage using PowerShell
             $cpu = shell_exec('powershell "Get-WmiObject Win32_Processor | Measure-Object -Property LoadPercentage -Average | Select-Object -ExpandProperty Average"');
             $cpuUsage = floatval(trim($cpu));
 
-            // Get memory usage using PowerShell
             $memory = shell_exec('powershell "(Get-Counter \'\Memory\% Committed Bytes In Use\' -SampleInterval 1 -MaxSamples 1).CounterSamples.CookedValue"');
             $memoryUsage = floatval(trim($memory));
 
-            // Get disk usage using PowerShell
             $disk = shell_exec('powershell "Get-WmiObject Win32_LogicalDisk -Filter \"DeviceID=\'C:\'\" | Select-Object Size,FreeSpace | ConvertTo-Json"');
             $diskInfo = json_decode($disk, true);
             
@@ -146,4 +133,91 @@ class ServerMonitoringService
     {
         return in_array($ip, ['127.0.0.1', 'localhost', '::1']);
     }
-} 
+
+    /**
+     * Check and log thresholds for server metrics
+     */
+    public function checkAndLogThresholds(Server $server, array $metrics)
+    {
+        $thresholds = \App\Models\AlertThreshold::where('server_id', $server->id)->get();
+
+        foreach ($thresholds as $threshold) {
+            $currentValue = null;
+            $metricKey = '';
+
+            // Map metric types to actual metric keys
+            switch ($threshold->metric_type) {
+                case 'CPU':
+                    $metricKey = 'cpu_usage';
+                    $currentValue = $metrics['cpu_usage'] ?? null;
+                    break;
+                case 'RAM':
+                    $metricKey = 'ram_usage';
+                    $currentValue = $metrics['ram_usage'] ?? null;
+                    break;
+                case 'Disk':
+                    $metricKey = 'disk_usage';
+                    $currentValue = $metrics['disk_usage'] ?? null;
+                    break;
+                case 'Load':
+                    $metricKey = 'load_average';
+                    $loadStr = $metrics['load_average'] ?? '0.0';
+                    // Extract first load average value (1-minute)
+                    $loadValues = explode(',', $loadStr);
+                    $currentValue = floatval(trim($loadValues[0] ?? '0'));
+                    break;
+            }
+
+            if ($currentValue !== null && $currentValue > $threshold->threshold_value) {
+                $level = $this->determineLevelBySeverity($threshold->metric_type, $currentValue, $threshold->threshold_value);
+                
+                \App\Models\Log::create([
+                    'server_id' => $server->id,
+                    'level' => $level,
+                    'source' => 'threshold_monitor',
+                    'log_level' => strtoupper($level),
+                    'message' => sprintf(
+                        '%s %s exceeded threshold: %.2f%s (threshold: %.2f%s)',
+                        ucfirst($threshold->metric_type),
+                        $threshold->metric_type === 'Load' ? 'average' : 'usage',
+                        $currentValue,
+                        $threshold->metric_type === 'Load' ? '' : '%',
+                        $threshold->threshold_value,
+                        $threshold->metric_type === 'Load' ? '' : '%'
+                    ),
+                    'context' => [
+                        'metric_type' => $threshold->metric_type,
+                        'current_value' => $currentValue,
+                        'threshold_value' => $threshold->threshold_value,
+                        'server_name' => $server->name,
+                        'server_ip' => $server->ip_address,
+                        'all_metrics' => $metrics
+                    ],
+                ]);
+                
+                // Log to Laravel's system log as well for debugging
+                \Illuminate\Support\Facades\Log::warning(
+                    "Threshold exceeded for {$server->name}: {$threshold->metric_type} = {$currentValue}"
+                );
+            }
+        }
+    }
+
+    /**
+     * Determine log level based on how much the threshold was exceeded
+     */
+    private function determineLevelBySeverity($metricType, $currentValue, $thresholdValue)
+    {
+        $exceedPercentage = ($currentValue - $thresholdValue) / $thresholdValue * 100;
+        
+        if ($exceedPercentage >= 50) { // 50% over threshold
+            return 'critical';
+        } elseif ($exceedPercentage >= 25) { // 25% over threshold
+            return 'error';
+        } elseif ($exceedPercentage >= 10) { // 10% over threshold
+            return 'warning';
+        } else {
+            return 'notice';
+        }
+    }
+}
