@@ -24,6 +24,7 @@ class MonitorServer extends Command
         $servers = Server::all();
         foreach ($servers as $server) {
             $metrics = $this->monitoringService->getMetrics($server);
+            $this->monitoringService->checkAndLogThresholds($server, $metrics);
             $payload = [
                 'server_id' => $server->id,
                 'name' => $server->name,

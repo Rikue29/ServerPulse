@@ -3,9 +3,11 @@
 namespace App\Http\Controllers;
 
 use App\Models\Server;
+use App\Models\AlertThreshold;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\DB;
 
 class ServerController extends Controller
 {
@@ -36,6 +38,14 @@ class ServerController extends Controller
             'ip_address' => 'required|string|max:45|unique:servers',
             'environment' => 'required|in:prod,staging,dev',
             'location' => 'nullable|string',
+            'ssh_user' => 'nullable|string|max:255',
+            'ssh_password' => 'nullable|string',
+            'ssh_key' => 'nullable|string',
+            'ssh_port' => 'nullable|integer|min:1|max:65535',
+            'cpu_threshold' => 'nullable|numeric|min:1|max:100',
+            'memory_threshold' => 'nullable|numeric|min:1|max:100',
+            'disk_threshold' => 'nullable|numeric|min:1|max:100',
+            'load_threshold' => 'nullable|numeric|min:0.1|max:10',
         ]);
 
         if ($validator->fails()) {
@@ -45,14 +55,48 @@ class ServerController extends Controller
                 ->withInput();
         }
 
-        $server = new Server($request->all());
-        $server->created_by = Auth::id();
-        $server->monitoring_type = 'online'; // Default value
-        $server->save();
+        DB::beginTransaction();
 
-        return redirect()
-            ->route('servers.index')
-            ->with('success', 'Server added successfully.');
+        try {
+            $server = new Server($request->all());
+            $server->created_by = Auth::id();
+            $server->monitoring_type = 'online'; // Default value
+            $server->save();
+
+            // Create alert thresholds if provided
+            $thresholds = [
+                'CPU' => $request->input('cpu_threshold', 80),
+                'RAM' => $request->input('memory_threshold', 85),
+                'Disk' => $request->input('disk_threshold', 90),
+                'Load' => $request->input('load_threshold', 2.0),
+            ];
+
+            foreach ($thresholds as $metricType => $thresholdValue) {
+                if ($thresholdValue) {
+                    AlertThreshold::create([
+                        'server_id' => $server->id,
+                        'metric_type' => $metricType, // Already uppercase to match enum values
+                        'threshold_value' => $thresholdValue,
+                        'notification_channel' => 'web', // Default notification channel
+                        'created_by' => Auth::id(),
+                    ]);
+                }
+            }
+
+            DB::commit();
+
+            return redirect()
+                ->route('servers.index')
+                ->with('success', 'Server and alert thresholds added successfully.');
+
+        } catch (\Exception $e) {
+            DB::rollback();
+            
+            return redirect()
+                ->route('servers.create')
+                ->withErrors(['error' => 'Failed to create server: ' . $e->getMessage()])
+                ->withInput();
+        }
     }
 
     /**
