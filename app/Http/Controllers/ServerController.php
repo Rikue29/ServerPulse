@@ -17,7 +17,12 @@ class ServerController extends Controller
     public function index()
     {
         $servers = Server::with('creator')->get();
-        return view('servers.index', compact('servers'));
+        $serverMetrics = [];
+        $monitoringService = new \App\Services\ServerMonitoringService();
+        foreach ($servers as $server) {
+            $serverMetrics[$server->id] = $monitoringService->getMetrics($server);
+        }
+        return view('servers.index', compact('servers', 'serverMetrics'));
     }
 
     /**
