@@ -1,0 +1,114 @@
+services:
+  apache:
+    image: httpd:latest
+    ports:
+      - "80:80"
+    volumes:
+      - ./:/var/www/html # Mount the entire Laravel project
+      - ./public:/var/www/html/public # Explicitly mount the public directory
+      - ./apache-config/httpd.conf:/usr/local/apache2/conf/httpd.conf
+    depends_on:
+      - php
+    networks:
+      - webapp-network
+
+  php:
+    container_name: php
+    image: php:8.2-fpm # Ensure this PHP version is compatible with your Laravel version
+    # platform: linux/amd64 # Uncomment if needed for Apple Silicon
+    volumes:
+      - .:/var/www/html/ # Mount the entire project directory into PHP-FPM
+    networks:
+      - webapp-network
+    environment:
+      - PHP_FPM_LISTEN=9000
+      - PHP_ERROR_REPORTING=E_ALL
+    command: >
+      bash -c "apt-get update && apt-get install -y 
+      libzip-dev 
+      unzip 
+      git 
+      && docker-php-ext-install pdo pdo_mysql zip opcache
+      && curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer 
+      && cd /var/www/html 
+      && mkdir -p storage/framework/{sessions,views,cache}
+      && mkdir -p storage/logs
+      && chmod -R 775 storage
+      && chmod -R 775 bootstrap/cache
+      && composer install --no-interaction
+      && php artisan key:generate --force
+      && php artisan config:cache
+      && php artisan route:cache
+      && php artisan view:cache
+      && php-fpm"
+
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: ariq12345    # Password for root user
+      MYSQL_DATABASE: serverpulse_db    # Database will be created on startup
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - webapp-network
+
+  phpmyadmin:
+    image: phpmyadmin:apache
+    ports:
+      - "8080:80"
+    environment:
+      PMA_HOST: mysql
+      MYSQL_ROOT_PASSWORD: ariq12345    # Should match MYSQL_ROOT_PASSWORD above
+      UPLOAD_LIMIT: 64M
+    depends_on:
+      - mysql
+    networks:
+      - webapp-network
+
+  # Scheduler Service
+  scheduler:
+    image: php:8.2-fpm
+    volumes:
+      - .:/var/www/html
+    networks:
+      - webapp-network
+    command: >
+      bash -c "apt-get update && apt-get install -y 
+      libzip-dev git unzip
+      && docker-php-ext-install pdo pdo_mysql zip opcache
+      && curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
+      && cd /var/www/html 
+      && composer install --no-interaction
+      && php artisan config:cache
+      && while true; do php artisan schedule:run --verbose; sleep 60; done"
+    depends_on:
+      - mysql
+      - php
+
+  # Queue Worker Service
+  queue:
+    image: php:8.2-fpm
+    volumes:
+      - .:/var/www/html
+    networks:
+      - webapp-network
+    command: >
+      bash -c "apt-get update && apt-get install -y \
+      libzip-dev git unzip procps \
+      && docker-php-ext-install pdo pdo_mysql zip opcache \
+      && curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer \
+      && cd /var/www/html \
+      && composer install --no-interaction \
+      && php artisan queue:work --sleep=3 --tries=3"
+    depends_on:
+      - mysql
+      - php
+
+volumes:
+  mysql_data:
+
+networks:
+  webapp-network:
+    driver: bridge
