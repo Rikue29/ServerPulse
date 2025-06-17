@@ -4,11 +4,12 @@ This document explains how to set up ServerPulse for continuous real-time monito
 
 ## How ServerPulse Monitoring Works
 
-ServerPulse regularly:
-1. Collects server metrics using the `servers:update-metrics` command
-2. Broadcasts these metrics in real-time using the `monitor:server` command
+ServerPulse uses an intelligent monitoring system:
+1. It collects server metrics using the `servers:update-metrics` command
+2. It broadcasts these metrics in real-time using the `monitor:server` command
+3. It uses adaptive timing to ensure reliable updates even if a collection cycle takes longer than expected
 
-Both commands run every 15 seconds, providing near real-time updates to your dashboard.
+The monitoring runs in cycles to ensure each update completes successfully before starting the next one.
 
 ## Setup Options
 

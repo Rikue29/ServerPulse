@@ -7,11 +7,13 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 class AlertThreshold extends Model
 {
-   use HasFactory;
+    use HasFactory;
 
     protected $fillable = [
         'server_id',
-        'metric_value',
-        'alert_type',
+        'metric_type',
+        'threshold_value',
+        'notification_channel',
+        'created_by',
     ];
 }
