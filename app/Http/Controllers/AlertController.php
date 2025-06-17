@@ -29,11 +29,11 @@ class AlertController extends Controller
             'Disk' => 'performance',
         ];
 
-$alertType = $typeMapping[$threshold->metric_type] ?? 'performance';
+        $alertType = $typeMapping[$threshold->metric_type] ?? 'performance';
 
 
         if ($validated['metric_value'] >= $threshold->threshold_value) {
-            $alert = Alert::create([
+             $alert = Alert::create([
                 'threshold_id'  => $threshold->id,
                 'server_id'     => $validated['server_id'],
                 'metric_value'  => $validated['metric_value'],
