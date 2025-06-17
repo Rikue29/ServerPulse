@@ -34,10 +34,16 @@
             padding-bottom: 20px;
             margin-bottom: 30px;
         }
-        
-        .company-logo {
+          .company-logo {
             text-align: center;
             margin-bottom: 20px;
+        }
+        
+        .logo-image {
+            width: 160px;
+            height: auto;
+            margin: 0 auto 10px auto;
+            display: block;
         }
         
         .company-name {
@@ -272,10 +278,10 @@
 </head>
 <body>
     <!-- Header Section -->
-    <div class="header">
-        <div class="company-logo">
+    <div class="header">        <div class="company-logo">
+            <img src="{{ public_path('images/serverpulse-logo.svg') }}" alt="ServerPulse" class="logo-image">
             <h1 class="company-name">ServerPulse</h1>
-            <p class="company-tagline">Infrastructure Monitoring & Analysis Platform</p>
+            <p class="company-tagline">Server Monitoring & Analysis Platform</p>
         </div>
         
         <h2 class="report-title">SYSTEM ANALYSIS REPORT</h2>
@@ -307,7 +313,7 @@
     <!-- Alert Level Banner -->
     <div class="alert-banner {{ $log->level == 'error' ? 'alert-error' : ($log->level == 'warning' ? 'alert-warning' : 'alert-info') }}">
         <h2 style="margin: 0; font-size: 20px;">
-            {{ $log->level == 'error' ? '⚠️ CRITICAL SYSTEM ALERT' : ($log->level == 'warning' ? '⚡ PERFORMANCE WARNING' : 'ℹ️ SYSTEM INFORMATION') }}
+            {{ $log->level == 'error' ? 'CRITICAL SYSTEM ALERT' : ($log->level == 'warning' ? 'PERFORMANCE WARNING' : 'SYSTEM INFORMATION') }}
         </h2>
         <p style="margin: 5px 0 0 0; font-size: 14px;">
             {{ $log->level == 'error' ? 'Immediate attention required' : ($log->level == 'warning' ? 'Monitoring and investigation recommended' : 'Informational event logged') }}
@@ -316,7 +322,7 @@
 
     <!-- Executive Summary -->
     <div class="section">
-        <h3 class="section-title">📋 EXECUTIVE SUMMARY</h3>
+        <h3 class="section-title">EXECUTIVE SUMMARY</h3>
         <p style="font-size: 14px; line-height: 1.8; text-align: justify;">
             @if($log->level == 'error')
                 <strong>CRITICAL INFRASTRUCTURE INCIDENT:</strong> Our automated monitoring systems have detected a critical error condition on server <strong>{{ $log->server->name ?? 'Unknown' }}</strong> ({{ $log->server->ip_address ?? 'IP not available' }}) at {{ $log->created_at->format('g:i A \o\n F j, Y') }}. This incident has been classified as high-priority and requires immediate technical intervention to prevent potential service disruption and maintain system reliability.
@@ -336,7 +342,7 @@
 
     <!-- Technical Analysis -->
     <div class="section">
-        <h3 class="section-title">🔧 TECHNICAL ANALYSIS</h3>
+        <h3 class="section-title">TECHNICAL ANALYSIS</h3>
         
         <div class="two-column">
             <div class="column">
@@ -386,7 +392,7 @@
     <!-- Performance Metrics -->
     @if($log->context && (isset($log->context['cpu_usage']) || isset($log->context['memory_usage']) || isset($log->context['disk_usage'])))
     <div class="section">
-        <h3 class="section-title">📊 PERFORMANCE METRICS AT TIME OF EVENT</h3>
+        <h3 class="section-title">PERFORMANCE METRICS AT TIME OF EVENT</h3>
         
         <div class="metrics-grid">
             @if(isset($log->context['cpu_usage']))
@@ -434,7 +440,7 @@
     <!-- Related Events Timeline -->
     @if($relatedLogs->count() > 0)
     <div class="section">
-        <h3 class="section-title">🔗 RELATED EVENTS TIMELINE (±30 MINUTES)</h3>
+        <h3 class="section-title">RELATED EVENTS TIMELINE (±30 MINUTES)</h3>
         
         <table class="timeline-table">
             <thead>
@@ -463,7 +469,7 @@
 
     <!-- Recommendations -->
     <div class="section">
-        <h3 class="section-title">💡 RECOMMENDATIONS & ACTION PLAN</h3>
+        <h3 class="section-title">RECOMMENDATIONS & ACTION PLAN</h3>
         
         <div class="recommendations">
             <h3>Immediate Response Protocol (0-4 hours)</h3>
@@ -509,7 +515,7 @@
 
     <!-- Success Metrics -->
     <div class="section">
-        <h3 class="section-title">🎯 SUCCESS METRICS & FOLLOW-UP</h3>
+        <h3 class="section-title">SUCCESS METRICS & FOLLOW-UP</h3>
         
         <div class="two-column">
             <div class="column">

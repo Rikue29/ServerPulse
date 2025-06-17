@@ -7,10 +7,7 @@
                 <!-- Logo -->
                 <div class="flex-shrink-0 flex items-center">
                     <div class="flex items-center space-x-3">
-                        <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-                            <span class="text-white font-bold text-sm">SP</span>
-                        </div>
-                        <span class="font-semibold text-xl text-gray-900">Server Pulse</span>
+                        <img src="{{ asset('images/serverpulse-logo.svg') }}" alt="ServerPulse" class="h-10 w-auto">
                     </div>
                 </div>
 

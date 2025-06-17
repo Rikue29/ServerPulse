@@ -48,9 +48,9 @@
     <!-- Actions & Filters -->
     <div class="bg-white/90 rounded-xl p-4 mb-4 shadow border flex flex-wrap gap-3 items-center justify-between">
         <div class="flex flex-wrap gap-3 items-center flex-1">
-            <input wire:model.debounce.300ms="search"
+            <input wire:model.lazy="search"
                 type="search"
-                placeholder="Search logs..."
+                placeholder="Search logs, levels, servers..."
                 class="flex-1 min-w-[200px] rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-200 text-sm px-3 py-2" />
 
             <select wire:model="selectedLevel"
@@ -76,35 +76,14 @@
         </div>
         <div class="flex items-center gap-2 mt-2 md:mt-0">
             <a href="{{ route('logs.export', request()->query()) }}"
-                class="bg-blue-600 text-white text-xs px-4 py-2 rounded hover:bg-blue-700 flex items-center font-medium border border-blue-700">
+                class="bg-green-600 text-white text-xs px-4 py-2 rounded hover:bg-green-700 flex items-center font-medium border border-green-700">
                 <i class="fas fa-download mr-2"></i> Export CSV
             </a>
 
             <button type="button" onclick="window.print()"
-                class="bg-blue-600 text-white text-xs px-4 py-2 rounded hover:bg-blue-700 flex items-center font-medium border border-blue-700">
+                class="bg-gray-600 text-white text-xs px-4 py-2 rounded hover:bg-gray-700 flex items-center font-medium border border-gray-700">
                 <i class="fas fa-print mr-2"></i> Print
             </button>
-
-            @if($logs->count() > 0)
-            <div class="relative inline-block">
-                <button id="pdfDropdown" class="bg-blue-600 text-white text-xs px-4 py-2 rounded hover:bg-blue-700 flex items-center font-medium border border-blue-700">
-                    <i class="fas fa-file-pdf mr-2"></i> PDF Reports <i class="fas fa-chevron-down ml-1"></i>
-                </button>
-                <div id="pdfDropdownMenu" class="hidden absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg z-10 border">
-                    @foreach($logs->take(5) as $recentLog)
-                    <a href="{{ route('logs.download', $recentLog) }}" 
-                       class="block px-4 py-2 text-sm text-gray-700 hover:bg-blue-50" 
-                       target="_blank">
-                        <i class="fas fa-file-pdf mr-2 text-blue-600"></i>
-                        Log #{{ str_pad($recentLog->id, 4, '0', STR_PAD_LEFT) }} - {{ ucfirst($recentLog->level) }}
-                    </a>
-                    @endforeach
-                    <div class="border-t border-gray-100 pt-1">
-                        <span class="block px-4 py-2 text-xs text-gray-500">Recent logs on this page</span>
-                    </div>
-                </div>
-            </div>
-            @endif
 
             <label class="inline-flex items-center ml-2 text-xs">
                 <input type="checkbox" wire:model="autoRefresh" class="form-checkbox rounded text-indigo-600" />
@@ -132,17 +111,21 @@
                             <span class="font-mono">{{ $log->created_at->format('Y-m-d H:i:s') }}</span>
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap">
-                            @if($log->level === 'error')
+                            @if($log->level === 'error' || $log->level === 'critical')
                                 <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-red-100 text-red-800 border border-red-200">
-                                    <i class="fas fa-fire mr-1"></i> CRITICAL
+                                    <i class="fas fa-exclamation-triangle mr-1"></i> CRITICAL
                                 </span>
-                            @elseif($log->level === 'warning')
+                            @elseif($log->level === 'warning' || $log->level === 'warn')
                                 <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-yellow-100 text-yellow-800 border border-yellow-200">
                                     <i class="fas fa-exclamation-triangle mr-1"></i> WARNING
                                 </span>
-                            @else
+                            @elseif($log->level === 'info' || $log->level === 'information')
                                 <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-800 border border-blue-200">
                                     <i class="fas fa-info-circle mr-1"></i> INFO
+                                </span>
+                            @else
+                                <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-800 border border-gray-200">
+                                    <i class="fas fa-question-circle mr-1"></i> {{ strtoupper($log->level) }}
                                 </span>
                             @endif
                         </td>
@@ -195,22 +178,16 @@
                             </div>
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-xs">
-                            <div class="flex gap-1">
+                            <div class="flex gap-2">
                                 <a href="{{ route('logs.show', $log) }}" 
-                                   class="bg-blue-600 hover:bg-blue-700 text-white px-2 py-1 rounded text-xs font-medium transition"
+                                   class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-xs font-medium transition"
                                    title="View Details">
-                                    <i class="fas fa-eye"></i>
-                                </a>
-                                <a href="{{ route('logs.download', $log) }}" 
-                                   class="bg-blue-600 hover:bg-blue-700 text-white px-2 py-1 rounded text-xs font-medium transition"
-                                   title="Download PDF Report"
-                                   target="_blank">
-                                    <i class="fas fa-file-pdf"></i>
+                                    <i class="fas fa-eye mr-1"></i> View
                                 </a>
                                 <a href="{{ route('logs.report', $log) }}" 
-                                   class="bg-blue-600 hover:bg-blue-700 text-white px-2 py-1 rounded text-xs font-medium transition"
+                                   class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1 rounded text-xs font-medium transition"
                                    title="View Full Report">
-                                    <i class="fas fa-file-alt"></i>
+                                    <i class="fas fa-file-alt mr-1"></i> Report
                                 </a>
                             </div>
                         </td>
@@ -244,23 +221,4 @@
             }, 30000); // Refresh every 30 seconds
         </script>
     @endif
-
-    <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            const dropdown = document.getElementById('pdfDropdown');
-            const menu = document.getElementById('pdfDropdownMenu');
-            
-            if (dropdown && menu) {
-                dropdown.addEventListener('click', function(e) {
-                    e.stopPropagation();
-                    menu.classList.toggle('hidden');
-                });
-
-                // Close dropdown when clicking outside
-                document.addEventListener('click', function() {
-                    menu.classList.add('hidden');
-                });
-            }
-        });
-    </script>
 </div>

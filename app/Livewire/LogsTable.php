@@ -40,11 +40,22 @@ class LogsTable extends Component
             ->when($this->search, function ($query, $search) {
                 $query->where(function ($query) use ($search) {
                     $query->where('message', 'like', "%{$search}%")
-                        ->orWhere('level', 'like', "%{$search}%");
+                        ->orWhere('level', 'like', "%{$search}%")
+                        ->orWhereHas('server', function($q) use ($search) {
+                            $q->where('name', 'like', "%{$search}%");
+                        });
                 });
             })
             ->when($this->selectedLevel, function ($query, $level) {
-                $query->where('level', $level);
+                if ($level === 'warning') {
+                    $query->whereIn('level', ['warning', 'warn']);
+                } elseif ($level === 'error') {
+                    $query->whereIn('level', ['error', 'critical']);
+                } elseif ($level === 'info') {
+                    $query->whereIn('level', ['info', 'information']);
+                } else {
+                    $query->where('level', $level);
+                }
             })
             ->when($this->selectedServer, function ($query, $serverId) {
                 $query->where('server_id', $serverId);
@@ -52,13 +63,16 @@ class LogsTable extends Component
             ->orderBy('created_at', 'desc');
 
         $logs = $query->paginate($this->perPage);
-        $servers = Server::all();
+        $servers = Server::all(['id', 'name']); // Only select needed columns
 
-        $stats = [
-            'total'    => Log::count(),
-            'errors'   => Log::where('level', 'error')->count(),
-            'warnings' => Log::where('level', 'warning')->count(),
-        ];
+        // Cache stats for better performance
+        $stats = cache()->remember('log_stats', 60, function () {
+            return [
+                'total'    => Log::count(),
+                'errors'   => Log::whereIn('level', ['error', 'critical'])->count(),
+                'warnings' => Log::whereIn('level', ['warning', 'warn'])->count(),
+            ];
+        });
 
         return view('livewire.logs-table', [
             'logs'        => $logs,
