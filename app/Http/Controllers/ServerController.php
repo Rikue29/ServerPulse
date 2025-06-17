@@ -19,9 +19,20 @@ class ServerController extends Controller
         $servers = Server::with('creator')->get();
         $serverMetrics = [];
         $monitoringService = new \App\Services\ServerMonitoringService();
+        
         foreach ($servers as $server) {
-            $serverMetrics[$server->id] = $monitoringService->getMetrics($server);
+            $metrics = $monitoringService->getMetrics($server);
+            
+            // Calculate current uptime/downtime for display
+            if ($metrics['status'] === 'online' && $server->running_since) {
+                $metrics['current_uptime'] = now()->diffInSeconds($server->running_since);
+            } elseif ($metrics['status'] !== 'online' && $server->last_down_at) {
+                $metrics['current_downtime'] = now()->diffInSeconds($server->last_down_at);
+            }
+            
+            $serverMetrics[$server->id] = $metrics;
         }
+        
         return view('servers.index', compact('servers', 'serverMetrics'));
     }
 

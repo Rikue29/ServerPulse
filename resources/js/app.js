@@ -133,6 +133,47 @@ channel.subscribed(() => {
         } else {
             console.warn('Disk cell not found for server_id:', eventData.server_id);
         }
+        
+        // Update Status and Uptime/Downtime
+        const statusCell = row.querySelector('[data-col="status"]');
+        if (statusCell) {
+            // Update status badge
+            const badge = statusCell.querySelector('span');
+            if (badge) {
+                badge.textContent = (eventData.status || 'offline').charAt(0).toUpperCase() + (eventData.status || 'offline').slice(1);
+                badge.className = 'px-2 inline-flex text-xs leading-5 font-semibold rounded-full ' +
+                    (eventData.status === 'online'
+                        ? 'bg-green-100 text-green-800'
+                        : 'bg-red-100 text-red-800');
+            }
+            // Remove any previous uptime/downtime info
+            let info = statusCell.querySelector('.server-uptime-info');
+            if (info) info.remove();
+
+            // Add new uptime/downtime info
+            info = document.createElement('span');
+            info.className = 'server-uptime-info text-xs text-gray-500 block';
+            if (eventData.status === 'online' && eventData.current_uptime) {
+                info.textContent = 'Uptime: ' + humanizeSeconds(eventData.current_uptime);
+            } else if (eventData.status !== 'online' && eventData.current_downtime) {
+                info.textContent = 'Downtime: ' + humanizeSeconds(eventData.current_downtime);
+            }
+            statusCell.appendChild(info);
+        }
+
+        // Helper to humanize seconds (simple version)
+        function humanizeSeconds(seconds) {
+            seconds = parseInt(seconds, 10);
+            if (isNaN(seconds) || seconds < 1) return '0s';
+            const h = Math.floor(seconds / 3600);
+            const m = Math.floor((seconds % 3600) / 60);
+            const s = seconds % 60;
+            return [
+                h ? h + 'h' : '',
+                m ? m + 'm' : '',
+                s ? s + 's' : ''
+            ].filter(Boolean).join(' ');
+        }
     } else {
         console.warn('Could not find row for server_id:', eventData.server_id);
     }

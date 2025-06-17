@@ -77,15 +77,31 @@ class ServerMonitoringService
             if (!$this->isLocalhost($server->ip_address)) {
                 if (($metrics['status'] ?? 'offline') === 'online') {
                     if (!$wasOnline || !$server->running_since) {
+                        // Server just came online
+                        if ($wasOnline === false && $server->last_down_at) {
+                            // Calculate downtime that just ended
+                            $downtimeDuration = now()->diffInSeconds($server->last_down_at);
+                            $server->total_downtime_seconds += $downtimeDuration;
+                        }
                         $server->running_since = now();
                         $server->last_down_at = null;
+                        $server->status = 'online';
                         $server->save();
+                        \Log::info("[Monitoring] Server {$server->name} ({$server->ip_address}) is ONLINE. running_since set to now.");
                     }
                 } else {
                     if ($wasOnline || !$server->last_down_at) {
+                        // Server just went offline
+                        if ($wasOnline === true && $server->running_since) {
+                            // Calculate uptime that just ended
+                            $uptimeDuration = now()->diffInSeconds($server->running_since);
+                            $server->total_uptime_seconds += $uptimeDuration;
+                        }
                         $server->last_down_at = now();
                         $server->running_since = null;
+                        $server->status = 'offline';
                         $server->save();
+                        \Log::warning("[Monitoring] Server {$server->name} ({$server->ip_address}) is OFFLINE. last_down_at set to now.");
                     }
                 }
             }
@@ -101,6 +117,23 @@ class ServerMonitoringService
             }
             return $metrics;
         } catch (Exception $e) {
+            // Server is offline due to connection failure
+            $wasOnline = $server->status === 'online';
+            
+            if ($wasOnline || !$server->last_down_at) {
+                // Server just went offline
+                if ($wasOnline === true && $server->running_since) {
+                    // Calculate uptime that just ended
+                    $uptimeDuration = now()->diffInSeconds($server->running_since);
+                    $server->total_uptime_seconds += $uptimeDuration;
+                }
+                $server->last_down_at = now();
+                $server->running_since = null;
+                $server->status = 'offline';
+                $server->save();
+                \Log::warning("[Monitoring] Server {$server->name} ({$server->ip_address}) went OFFLINE due to error: " . $e->getMessage());
+            }
+            
             return [
                 'cpu_usage' => 0,
                 'ram_usage' => 0,
@@ -139,13 +172,46 @@ class ServerMonitoringService
             } else {
                 $diskUsage = 0;
             }
+            
             $metrics = [
                 'cpu_usage' => $cpuUsage,
                 'ram_usage' => $memoryUsage,
                 'disk_usage' => $diskUsage,
                 'status' => 'online'
             ];
+            
             if ($server) {
+                // Handle downtime tracking for localhost
+                $wasOnline = $server->status === 'online';
+                
+                if ($metrics['status'] === 'online') {
+                    if (!$wasOnline || !$server->running_since) {
+                        // Server just came online
+                        if ($wasOnline === false && $server->last_down_at) {
+                            // Calculate downtime that just ended
+                            $downtimeDuration = now()->diffInSeconds($server->last_down_at);
+                            $server->total_downtime_seconds += $downtimeDuration;
+                        }
+                        $server->running_since = now();
+                        $server->last_down_at = null;
+                        $server->status = 'online';
+                        $server->save();
+                    }
+                } else {
+                    if ($wasOnline || !$server->last_down_at) {
+                        // Server just went offline
+                        if ($wasOnline === true && $server->running_since) {
+                            // Calculate uptime that just ended
+                            $uptimeDuration = now()->diffInSeconds($server->running_since);
+                            $server->total_uptime_seconds += $uptimeDuration;
+                        }
+                        $server->last_down_at = now();
+                        $server->running_since = null;
+                        $server->status = 'offline';
+                        $server->save();
+                    }
+                }
+                
                 $metrics['running_since'] = $server->running_since;
                 $metrics['last_down_at'] = $server->last_down_at;
                 $metrics['total_uptime_seconds'] = $server->total_uptime_seconds;
@@ -156,16 +222,37 @@ class ServerMonitoringService
             }
             return $metrics;
         } catch (\Throwable $e) {
-            return [
+            $metrics = [
                 'cpu_usage' => 0,
                 'ram_usage' => 0,
                 'disk_usage' => 0,
                 'status' => 'offline',
                 'error' => $e->getMessage(),
-                'last_down_at' => $server ? $server->last_down_at : null,
-                'total_downtime_seconds' => $server ? $server->total_downtime_seconds : null,
-                'current_downtime' => $server && $server->last_down_at ? now()->diffInSeconds($server->last_down_at) : null
             ];
+            
+            if ($server) {
+                // Handle downtime tracking for failed localhost
+                $wasOnline = $server->status === 'online';
+                
+                if ($wasOnline || !$server->last_down_at) {
+                    // Server just went offline
+                    if ($wasOnline === true && $server->running_since) {
+                        // Calculate uptime that just ended
+                        $uptimeDuration = now()->diffInSeconds($server->running_since);
+                        $server->total_uptime_seconds += $uptimeDuration;
+                    }
+                    $server->last_down_at = now();
+                    $server->running_since = null;
+                    $server->status = 'offline';
+                    $server->save();
+                }
+                
+                $metrics['last_down_at'] = $server->last_down_at;
+                $metrics['total_downtime_seconds'] = $server->total_downtime_seconds;
+                $metrics['current_downtime'] = $server->last_down_at ? now()->diffInSeconds($server->last_down_at) : null;
+            }
+            
+            return $metrics;
         }
     }
 
@@ -257,7 +344,39 @@ class ServerMonitoringService
             'uptime' => $uptime,
             'load_average' => $loadAvg
         ];
+        
         if ($server) {
+            // Handle downtime tracking for Linux localhost
+            $wasOnline = $server->status === 'online';
+            
+            if ($metrics['status'] === 'online') {
+                if (!$wasOnline || !$server->running_since) {
+                    // Server just came online
+                    if ($wasOnline === false && $server->last_down_at) {
+                        // Calculate downtime that just ended
+                        $downtimeDuration = now()->diffInSeconds($server->last_down_at);
+                        $server->total_downtime_seconds += $downtimeDuration;
+                    }
+                    $server->running_since = now();
+                    $server->last_down_at = null;
+                    $server->status = 'online';
+                    $server->save();
+                }
+            } else {
+                if ($wasOnline || !$server->last_down_at) {
+                    // Server just went offline
+                    if ($wasOnline === true && $server->running_since) {
+                        // Calculate uptime that just ended
+                        $uptimeDuration = now()->diffInSeconds($server->running_since);
+                        $server->total_uptime_seconds += $uptimeDuration;
+                    }
+                    $server->last_down_at = now();
+                    $server->running_since = null;
+                    $server->status = 'offline';
+                    $server->save();
+                }
+            }
+            
             $metrics['running_since'] = $server->running_since;
             $metrics['last_down_at'] = $server->last_down_at;
             $metrics['total_uptime_seconds'] = $server->total_uptime_seconds;

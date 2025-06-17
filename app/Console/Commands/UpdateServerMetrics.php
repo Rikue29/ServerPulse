@@ -29,13 +29,31 @@ class UpdateServerMetrics extends Command
             
             try {
                 $metrics = $this->monitoringService->getMetrics($server);
-                $server->update([
+                
+                // Update basic metrics
+                $updateData = [
                     'cpu_usage' => $metrics['cpu_usage'],
                     'ram_usage' => $metrics['ram_usage'],
                     'disk_usage' => $metrics['disk_usage'],
                     'status' => $metrics['status'],
                     'last_checked_at' => now(),
-                ]);
+                ];
+                
+                // Preserve downtime tracking fields that were set by the monitoring service
+                if (isset($metrics['running_since'])) {
+                    $updateData['running_since'] = $metrics['running_since'];
+                }
+                if (isset($metrics['last_down_at'])) {
+                    $updateData['last_down_at'] = $metrics['last_down_at'];
+                }
+                if (isset($metrics['total_uptime_seconds'])) {
+                    $updateData['total_uptime_seconds'] = $metrics['total_uptime_seconds'];
+                }
+                if (isset($metrics['total_downtime_seconds'])) {
+                    $updateData['total_downtime_seconds'] = $metrics['total_downtime_seconds'];
+                }
+                
+                $server->update($updateData);
 
                 $this->info("✓ Updated metrics for {$server->name}");
             } catch (\Exception $e) {

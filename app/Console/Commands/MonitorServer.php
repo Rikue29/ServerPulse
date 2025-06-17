@@ -34,6 +34,10 @@ class MonitorServer extends Command
                 'disk_usage' => $metrics['disk_usage'] ?? null,
                 'status' => $metrics['status'] ?? 'offline',
                 'last_checked_at' => now()->toDateTimeString(),
+                'last_down_at' => $metrics['last_down_at'] ?? null,
+                'running_since' => $metrics['running_since'] ?? null,
+                'current_uptime' => $metrics['current_uptime'] ?? null,
+                'current_downtime' => $metrics['current_downtime'] ?? null,
             ];
             broadcast(new ServerStatusUpdated($payload));
             $this->info("Broadcasted status for {$server->name} ({$server->ip_address})");
