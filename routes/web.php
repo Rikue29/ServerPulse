@@ -24,8 +24,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 
     // Logs Routes
-    Route::get('/logs', \App\Livewire\LogsTable::class)->name('logs.index');
-    Route::get('/logs/{log}', \App\Livewire\LogDetails::class)->name('logs.show');
+    Route::get('/logs', [LogController::class, 'index'])->name('logs.index');
+    Route::get('/logs/{log}', [LogController::class, 'show'])->name('logs.show');
+    Route::get('/logs/{log}/report', [LogController::class, 'generateReport'])->name('logs.report');
+    Route::get('/logs/{log}/download', [LogController::class, 'downloadReport'])->name('logs.download');
+    Route::get('/logs/export/csv', [LogController::class, 'exportCsv'])->name('logs.export');
 });
 
 require __DIR__.'/auth.php';

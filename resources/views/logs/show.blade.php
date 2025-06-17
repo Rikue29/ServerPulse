@@ -138,20 +138,30 @@
 
             <!-- Actions -->
             <div class="flex justify-between items-center pt-6 border-t border-gray-200">
-                <a href="{{ route('logs.index') }}" class="inline-flex items-center px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors duration-200">
+                <a href="{{ route('logs.index') }}" class="inline-flex items-center px-6 py-3 text-blue-600 bg-white border border-blue-600 rounded-lg hover:bg-blue-50 transition-colors duration-200 font-medium">
                     <i class="fas fa-arrow-left mr-2"></i>
                     Back to Logs
                 </a>
 
-                <div class="flex space-x-2">
-                    <button onclick="window.print()" class="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200">
+                <div class="flex space-x-3">
+                    <a href="{{ route('logs.report', $log) }}" class="inline-flex items-center px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200 font-medium">
+                        <i class="fas fa-file-alt mr-2"></i>
+                        View Report
+                    </a>
+
+                    <a href="{{ route('logs.download', $log) }}" class="inline-flex items-center px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200 font-medium">
+                        <i class="fas fa-file-pdf mr-2"></i>
+                        Download PDF
+                    </a>
+                    
+                    <button onclick="window.print()" class="inline-flex items-center px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200 font-medium">
                         <i class="fas fa-print mr-2"></i>
                         Print
                     </button>
 
-                    <button onclick="copyToClipboard()" class="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors duration-200">
+                    <button onclick="copyToClipboard()" class="inline-flex items-center px-6 py-3 text-blue-600 bg-white border border-blue-600 rounded-lg hover:bg-blue-50 transition-colors duration-200 font-medium">
                         <i class="fas fa-copy mr-2"></i>
-                        Copy
+                        Copy Data
                     </button>
                 </div>
             </div>

@@ -6,11 +6,12 @@ use App\Models\Log;
 use App\Models\Server;
 use Livewire\Component;
 use Livewire\WithPagination;
-use Illuminate\Support\Facades\Response;
 
 class LogsTable extends Component
 {
     use WithPagination;
+
+    protected $paginationTheme = 'tailwind';
 
     public $autoRefresh = true;
     public $search = '';
@@ -82,40 +83,6 @@ class LogsTable extends Component
     public function toggleAutoRefresh()
     {
         $this->autoRefresh = ! $this->autoRefresh;
-    }
-
-    public function exportCsv()
-    {
-        $query = Log::query()
-            ->with('server')
-            ->when($this->search, fn($q) => $q->where('message', 'like', "%{$this->search}%"))
-            ->when($this->selectedLevel, fn($q) => $q->where('level', $this->selectedLevel))
-            ->when($this->selectedServer, fn($q) => $q->where('server_id', $this->selectedServer))
-            ->orderBy('created_at', 'desc');
-
-        $logs = $query->get();
-        $filename = 'logs_export_' . now()->format('Ymd_His') . '.csv';
-
-        // Output CSV to a string
-        $handle = fopen('php://temp', 'w+');
-        fputcsv($handle, ['Timestamp', 'Level', 'Server', 'Message']);
-        foreach ($logs as $log) {
-            fputcsv($handle, [
-                $log->created_at,
-                $log->level,
-                $log->server->name ?? '-',
-                $log->message,
-            ]);
-        }
-        rewind($handle);
-        $csv = stream_get_contents($handle);
-        fclose($handle);
-
-        return Response::streamDownload(function () use ($csv) {
-            echo $csv;
-        }, $filename, [
-            'Content-Type' => 'text/csv',
-        ]);
     }
 
     public function refreshLogs()
