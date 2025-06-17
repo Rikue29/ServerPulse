@@ -10,6 +10,7 @@ Route::get('/', function () {
     return redirect()->route('dashboard');
 });
 
+// Protected routes requiring authentication
 Route::middleware(['auth', 'verified'])->group(function () {
     // Dashboard (Server List)
     Route::get('/dashboard', [ServerController::class, 'index'])->name('dashboard');
@@ -23,8 +24,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 
     // Logs Routes
-    Route::get('/logs', [LogController::class, 'index'])->name('logs.index');
-    //Route::get('/logs/{log}', [\App\Http\Controllers\LogController::class, 'show'])->name('logs.show');
+    Route::get('/logs', \App\Livewire\LogsTable::class)->name('logs.index');
+    Route::get('/logs/{log}', \App\Livewire\LogDetails::class)->name('logs.show');
 });
 
 require __DIR__.'/auth.php';

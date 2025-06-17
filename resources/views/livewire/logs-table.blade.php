@@ -1,26 +1,49 @@
-<div class="space-y-10">
+<div class="space-y-6">
 
-<!-- Stat Cards: Responsive, always in a single grid container -->
-<div class="grid grid-cols-1 md:grid-cols-3 gap-4 w-full mb-8">
-    <!-- Total Logs -->
-    <div class="bg-white p-6 rounded-2xl shadow border flex flex-col items-center justify-center">
-        <span class="text-4xl text-indigo-500 mb-1"><i class="fas fa-list"></i></span>
-        <span class="text-3xl font-extrabold text-gray-900">{{ $stats['total'] }}</span>
-        <span class="text-base text-gray-500 mt-1">Total Logs</span>
+    <!-- Critical Alerts Summary -->
+    <div class="bg-gradient-to-r from-red-50 to-orange-50 border border-red-200 rounded-xl p-6">
+        <div class="flex items-center justify-between mb-4">
+            <div class="flex items-center space-x-3">
+                <div class="p-2 bg-red-100 rounded-full">
+                    <i class="fas fa-exclamation-triangle text-red-600"></i>
+                </div>
+                <h2 class="text-lg font-semibold text-red-900">Infrastructure Alert Dashboard</h2>
+            </div>
+            <div class="text-sm text-red-700">
+                <i class="fas fa-clock mr-1"></i> Real-time monitoring
+            </div>
+        </div>
+        
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="bg-white/60 rounded-lg p-4 border border-red-100">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm text-red-600 font-medium">Critical Alerts</p>
+                        <p class="text-2xl font-bold text-red-900">{{ $stats['errors'] }}</p>
+                    </div>
+                    <i class="fas fa-fire text-red-500 text-xl"></i>
+                </div>
+            </div>
+            <div class="bg-white/60 rounded-lg p-4 border border-yellow-100">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm text-yellow-600 font-medium">Threshold Warnings</p>
+                        <p class="text-2xl font-bold text-yellow-900">{{ $stats['warnings'] }}</p>
+                    </div>
+                    <i class="fas fa-chart-line text-yellow-500 text-xl"></i>
+                </div>
+            </div>
+            <div class="bg-white/60 rounded-lg p-4 border border-blue-100">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm text-blue-600 font-medium">Total Events</p>
+                        <p class="text-2xl font-bold text-blue-900">{{ $stats['total'] }}</p>
+                    </div>
+                    <i class="fas fa-database text-blue-500 text-xl"></i>
+                </div>
+            </div>
+        </div>
     </div>
-    <!-- Errors -->
-    <div class="bg-white p-6 rounded-2xl shadow border flex flex-col items-center justify-center">
-        <span class="text-4xl text-red-500 mb-1"><i class="fas fa-exclamation-triangle"></i></span>
-        <span class="text-3xl font-extrabold text-red-700">{{ $stats['errors'] }}</span>
-        <span class="text-base text-red-500 mt-1">Errors</span>
-    </div>
-    <!-- Warnings -->
-    <div class="bg-white p-6 rounded-2xl shadow border flex flex-col items-center justify-center">
-        <span class="text-4xl text-yellow-500 mb-1"><i class="fas fa-exclamation-circle"></i></span>
-        <span class="text-3xl font-extrabold text-yellow-600">{{ $stats['warnings'] }}</span>
-        <span class="text-base text-yellow-500 mt-1">Warnings</span>
-    </div>
-</div>
 
     <!-- Actions & Filters -->
     <div class="bg-white/90 rounded-xl p-4 mb-4 shadow border flex flex-wrap gap-3 items-center justify-between">
@@ -51,14 +74,14 @@
                 <i class="fas fa-times-circle mr-1"></i> Clear
             </button>
         </div>
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-2 mt-2 md:mt-0">
             <button type="button" wire:click="exportCsv"
-                class="bg-green-600 text-black text-xs px-4 py-2 rounded hover:bg-green-700 flex items-center">
+                class="bg-green-600 text-black text-xs px-4 py-2 rounded hover:bg-green-700 flex items-center font-medium border border-green-700">
                 <i class="fas fa-download mr-2"></i> Export CSV
             </button>
 
             <button type="button" onclick="window.print()"
-                class="bg-blue-600 text-white text-xs px-4 py-2 rounded hover:bg-blue-700 flex items-center">
+                class="bg-blue-600 text-white text-xs px-4 py-2 rounded hover:bg-blue-700 flex items-center font-medium border border-blue-700">
                 <i class="fas fa-print mr-2"></i> Print
             </button>
 
@@ -89,48 +112,104 @@
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap">
                             @if($log->level === 'error')
-                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-800">
-                                    <i class="fas fa-exclamation-triangle mr-1"></i> Error
+                                <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-red-100 text-red-800 border border-red-200">
+                                    <i class="fas fa-fire mr-1"></i> CRITICAL
                                 </span>
                             @elseif($log->level === 'warning')
-                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-800">
-                                    <i class="fas fa-exclamation-circle mr-1"></i> Warning
+                                <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-yellow-100 text-yellow-800 border border-yellow-200">
+                                    <i class="fas fa-exclamation-triangle mr-1"></i> WARNING
                                 </span>
                             @else
-                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">
-                                    <i class="fas fa-info-circle mr-1"></i> Info
+                                <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-800 border border-blue-200">
+                                    <i class="fas fa-info-circle mr-1"></i> INFO
                                 </span>
                             @endif
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-xs text-gray-700">
-                            {{ $log->server->name ?? '-' }}
+                            <div class="flex flex-col">
+                                <span class="font-medium">{{ $log->server->name ?? '-' }}</span>
+                                @if($log->server && $log->server->ip_address)
+                                    <span class="text-gray-500 text-xs">{{ $log->server->ip_address }}</span>
+                                @endif
+                            </div>
                         </td>
                         <td class="px-6 py-4 text-xs text-gray-800">
-                            {{ \Illuminate\Support\Str::limit($log->message, 80) }}
+                            <div class="flex flex-col space-y-1">
+                                <span class="font-medium">{{ \Illuminate\Support\Str::limit($log->message, 60) }}</span>
+                                @php
+                                    $context = $log->context;
+                                    if (is_string($context)) {
+                                        $context = json_decode($context, true) ?? [];
+                                    } elseif (!is_array($context)) {
+                                        $context = [];
+                                    }
+                                    $alertType = $context['alert_type'] ?? null;
+                                @endphp
+                                @if($alertType)
+                                    <span class="text-xs px-2 py-1 rounded @if($log->level === 'error') bg-red-50 text-red-600 @elseif($log->level === 'warning') bg-yellow-50 text-yellow-600 @else bg-blue-50 text-blue-600 @endif">
+                                        @switch($alertType)
+                                            @case('cpu_spike')
+                                                🔥 CPU Overload
+                                                @break
+                                            @case('memory_warning')
+                                                💾 Memory Alert
+                                                @break
+                                            @case('disk_critical')
+                                                💿 Disk Space
+                                                @break
+                                            @case('load_spike')
+                                                ⚡ High Load
+                                                @break
+                                            @case('network_congestion')
+                                                🌐 Network Issue
+                                                @break
+                                            @case('system_overload')
+                                                🚨 System Overload
+                                                @break
+                                            @default
+                                                📊 Infrastructure Alert
+                                        @endswitch
+                                    </span>
+                                @endif
+                            </div>
                         </td>
-                        <td class="px-6 py-4 whitespace-nowrap">
-                            <a href="{{ route('logs.show', $log) }}"
-                                class="inline-flex items-center px-3 py-1 text-xs font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">
-                                <i class="fas fa-eye mr-1"></i> View
-                            </a>
+                        <td class="px-6 py-4 whitespace-nowrap text-xs">
+                            <div class="flex gap-2">
+                                <a href="{{ route('logs.show', $log) }}" 
+                                   class="@if($log->level === 'error') bg-red-600 hover:bg-red-700 @elseif($log->level === 'warning') bg-yellow-600 hover:bg-yellow-700 @else bg-blue-600 hover:bg-blue-700 @endif text-white px-3 py-1 rounded text-xs font-medium transition">
+                                    <i class="fas fa-search-plus mr-1"></i> 
+                                    @if($alertType) Analyze @else View @endif
+                                </a>
+                            </div>
                         </td>
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="5" class="px-6 py-10 text-center text-gray-400 text-xs">No logs found</td>
+                        <td colspan="5" class="px-6 py-8 text-center text-gray-500">
+                            <div class="flex flex-col items-center">
+                                <i class="fas fa-inbox text-gray-300 text-3xl mb-3"></i>
+                                <p>No logs found</p>
+                                <p class="text-xs">Try adjusting your search filters</p>
+                            </div>
+                        </td>
                     </tr>
                 @endforelse
             </tbody>
         </table>
-        <div class="px-4 py-3 border-t border-gray-100 bg-gray-50">
-            {{ $logs->links() }}
-        </div>
+
+        <!-- Pagination -->
+        @if($logs->hasPages())
+            <div class="px-6 py-4 border-t border-gray-200">
+                {{ $logs->links() }}
+            </div>
+        @endif
     </div>
 
     @if($autoRefresh)
         <script>
-            setInterval(() => Livewire.emit('refreshLogs'), 5000);
+            setInterval(() => {
+                Livewire.emit('refreshLogs');
+            }, 30000); // Refresh every 30 seconds
         </script>
     @endif
-
 </div>

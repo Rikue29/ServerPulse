@@ -40,18 +40,6 @@ class CreateTestServer extends Command
 
         $this->info("User created/found: {$user->email}");
 
-        // Create test server
-        $server = Server::create([
-            'name' => 'Ubuntu Test VM',
-            'ip_address' => '192.168.159.128',
-            'environment' => 'dev',
-            'monitoring_type' => 'online',
-            'created_by' => $user->id,
-            'ssh_user' => 'ubuntu',
-            'ssh_password' => '123456789',
-            'ssh_port' => 22
-        ]);
-
         $this->info("Server created: {$server->name} ({$server->ip_address})");
 
         // Create thresholds (set low to trigger alerts for testing)

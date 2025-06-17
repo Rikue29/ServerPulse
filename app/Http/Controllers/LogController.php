@@ -12,4 +12,10 @@ class LogController extends Controller
     {
         return view('logs'); 
     }
+
+    public function show($id)
+    {
+        $log = Log::findOrFail($id);
+        return view('log-details', ['log' => $log]);
+    }
 }

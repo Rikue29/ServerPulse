@@ -59,7 +59,7 @@ class ServerController extends Controller
 
         try {
             $server = new Server($request->all());
-            $server->created_by = Auth::id();
+            $server->created_by = Auth::id(); // Authenticated user required
             $server->monitoring_type = 'online'; // Default value
             $server->save();
 
@@ -78,7 +78,7 @@ class ServerController extends Controller
                         'metric_type' => $metricType, // Already uppercase to match enum values
                         'threshold_value' => $thresholdValue,
                         'notification_channel' => 'web', // Default notification channel
-                        'created_by' => Auth::id(),
+                        'created_by' => Auth::id(), // Authenticated user required
                     ]);
                 }
             }
