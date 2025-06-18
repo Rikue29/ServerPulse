@@ -4,7 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Models\Server;
-use App\Models\Log;
+use App\Models\PerformanceLog;
 use Illuminate\Support\Facades\DB;
 
 class AnalyticsController extends Controller
@@ -32,38 +32,41 @@ class AnalyticsController extends Controller
         ];
 
         if ($selected_server_id) {
-            $logs = Log::where('server_id', $selected_server_id)
-                       ->where('source', 'performance_log')
+            $performance_logs = PerformanceLog::where('server_id', $selected_server_id)
                        ->where('created_at', '>=', now()->subDay())
                        ->orderBy('created_at', 'asc')
                        ->get();
-
+            
             $last_log = null;
 
-            foreach ($logs as $log) {
-                if (isset($log->context['all_metrics'])) {
-                    $metrics = $log->context['all_metrics'];
-                    $chart_data['labels'][] = $log->created_at->format('H:i');
-                    $chart_data['cpu_load'][] = $metrics['cpu_usage'] ?? 0;
-                    $chart_data['memory_usage'][] = $metrics['ram_usage'] ?? 0;
-                    // network speed in MB/s
-                    $chart_data['network_traffic'][] = isset($metrics['network_speed']) ? $metrics['network_speed'] / 1024 / 1024 : 0;
-                    // disk I/O in MB/s
-                    if (isset($last_log)) {
-                        $time_diff = $log->created_at->diffInSeconds($last_log->created_at);
-                        if ($time_diff > 0) {
-                            $read_diff = ($metrics['disk_io_read'] ?? 0) - ($last_log->context['all_metrics']['disk_io_read'] ?? 0);
-                            $write_diff = ($metrics['disk_io_write'] ?? 0) - ($last_log->context['all_metrics']['disk_io_write'] ?? 0);
-                            $disk_io_speed = ($read_diff + $write_diff) / $time_diff / 1024 / 1024; // MB/s
-                            $chart_data['disk_io'][] = round($disk_io_speed, 2);
-                        } else {
-                            $chart_data['disk_io'][] = 0;
-                        }
+            foreach ($performance_logs as $log) {
+                $chart_data['labels'][] = $log->created_at->format('H:i');
+                $chart_data['cpu_load'][] = $log->cpu_usage;
+                $chart_data['memory_usage'][] = $log->ram_usage;
+
+                if ($last_log) {
+                    $time_diff = $log->created_at->diffInSeconds($last_log->created_at);
+                    if ($time_diff > 0) {
+                        // Network speed in MB/s
+                        $net_rx_diff = $log->network_rx - $last_log->network_rx;
+                        $net_tx_diff = $log->network_tx - $last_log->network_tx;
+                        $network_speed = ($net_rx_diff + $net_tx_diff) / $time_diff / 1024 / 1024;
+                        $chart_data['network_traffic'][] = round($network_speed, 2);
+
+                        // Disk I/O in MB/s
+                        $disk_read_diff = $log->disk_io_read - $last_log->disk_io_read;
+                        $disk_write_diff = $log->disk_io_write - $last_log->disk_io_write;
+                        $disk_io_speed = ($disk_read_diff + $disk_write_diff) / $time_diff / 1024 / 1024;
+                        $chart_data['disk_io'][] = round($disk_io_speed, 2);
                     } else {
+                        $chart_data['network_traffic'][] = 0;
                         $chart_data['disk_io'][] = 0;
                     }
-                    $last_log = $log;
+                } else {
+                    $chart_data['network_traffic'][] = 0;
+                    $chart_data['disk_io'][] = 0;
                 }
+                $last_log = $log;
             }
         }
 

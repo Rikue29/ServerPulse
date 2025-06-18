@@ -6,6 +6,7 @@ use Illuminate\Console\Command;
 use App\Events\ServerStatusUpdated;
 use App\Models\Server;
 use App\Services\ServerMonitoringService;
+use App\Models\PerformanceLog;
 
 class MonitorServer extends Command
 {
@@ -54,36 +55,22 @@ class MonitorServer extends Command
             $server->save();
 
             // Create a performance log for every check
-            \App\Models\Log::create([
+            PerformanceLog::create([
                 'server_id' => $server->id,
-                'level' => 'info',
-                'log_level' => 'INFO',
-                'source' => 'performance_log',
-                'message' => 'Server metrics collected.',
-                'context' => [
-                    'all_metrics' => $metrics
-                ],
+                'cpu_usage' => $metrics['cpu_usage'] ?? 0,
+                'ram_usage' => $metrics['ram_usage'] ?? 0,
+                'disk_usage' => $metrics['disk_usage'] ?? 0,
+                'network_rx' => $metrics['network_rx'] ?? 0,
+                'network_tx' => $metrics['network_tx'] ?? 0,
+                'disk_io_read' => $metrics['disk_io_read'] ?? 0,
+                'disk_io_write' => $metrics['disk_io_write'] ?? 0,
             ]);
 
             // 3. Check for threshold breaches
             $this->monitoringService->checkAndLogThresholds($server, $metrics);
 
             // 4. Broadcast the updated status
-            $payload = [
-                'server_id' => $server->id,
-                'name' => $server->name,
-                'ip_address' => $server->ip_address,
-                'cpu_usage' => $server->cpu_usage,
-                'ram_usage' => $server->ram_usage,
-                'disk_usage' => $server->disk_usage,
-                'status' => $server->status,
-                'system_uptime' => $server->system_uptime,
-                'last_down_at' => $server->last_down_at?->toDateTimeString(),
-                'current_uptime' => $server->running_since ? $server->running_since->diffInSeconds(now()) : null,
-                'current_downtime' => $server->last_down_at ? $server->last_down_at->diffInSeconds(now()) : 0,
-            ];
-            
-            broadcast(new ServerStatusUpdated($payload));
+            broadcast(new ServerStatusUpdated($server->id, $metrics));
             $this->info("Broadcasted status for {$server->name} ({$server->ip_address})");
         }
     }
