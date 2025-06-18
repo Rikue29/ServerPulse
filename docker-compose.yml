@@ -11,6 +11,9 @@ services:
       - php
     networks:
       - webapp-network
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
 
   php:
     container_name: php
@@ -23,6 +26,9 @@ services:
     environment:
       - PHP_FPM_LISTEN=9000
       - PHP_ERROR_REPORTING=E_ALL
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
     command: >
       bash -c "apt-get update && apt-get install -y 
       libzip-dev 
@@ -53,6 +59,9 @@ services:
       - mysql_data:/var/lib/mysql
     networks:
       - webapp-network
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
 
   phpmyadmin:
     image: phpmyadmin:apache
@@ -66,6 +75,9 @@ services:
       - mysql
     networks:
       - webapp-network
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
 
   # Scheduler Service
   scheduler:
@@ -74,6 +86,9 @@ services:
       - .:/var/www/html
     networks:
       - webapp-network
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
     command: >
       bash -c "apt-get update && apt-get install -y 
       libzip-dev git unzip
@@ -94,6 +109,9 @@ services:
       - .:/var/www/html
     networks:
       - webapp-network
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
     command: >
       bash -c "apt-get update && apt-get install -y \
       libzip-dev git unzip procps \
