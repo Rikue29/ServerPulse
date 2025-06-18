@@ -11,181 +11,381 @@ use Exception;
 
 class ServerMonitoringService
 {
-    // Add properties to cache metrics and reduce load when polling frequently
-    private $lastLocalMetricsTimestamp = 0;
-    private $cachedLocalMetrics = null;
-    private $lastRemoteMetricsTimestamp = [];
-    private $cachedRemoteMetrics = [];
-    
-    // Cache threshold in seconds - don't poll more frequently than this
-    private $localCacheThreshold = 2; // For local server
-    private $remoteCacheThreshold = 4; // For remote servers
-
     /**
      * Get server metrics via SSH
      */
     public function getMetrics(Server $server)
     {
         try {
+            $wasOnline = $server->status === 'online';
             if ($this->isLocalhost($server->ip_address)) {
-                // Check if we need fresh metrics or can use cached ones
-                $currentTime = time();
-                if ($this->cachedLocalMetrics !== null && 
-                    ($currentTime - $this->lastLocalMetricsTimestamp) < $this->localCacheThreshold) {
-                    Log::info("[Monitoring] Using cached metrics for localhost (last updated " . 
-                              ($currentTime - $this->lastLocalMetricsTimestamp) . " seconds ago)");
-                    return $this->cachedLocalMetrics;
+                $metrics = $this->getLocalMetrics($server);
+            } else {
+                $ssh = new SSH2($server->ip_address, $server->ssh_port ?? 22);
+                
+                if (!empty($server->ssh_key)) {
+                    $key = PublicKeyLoader::load($server->ssh_key);
+                    $success = $ssh->login($server->ssh_user, $key);
+                } else {
+                    $success = $ssh->login($server->ssh_user, $server->ssh_password);
+                }
+
+                if (!$success) {
+                    // \Illuminate\Support\Facades\Log::error("[Monitoring] SSH login failed for {$server->ip_address} as {$server->ssh_user}");
+                    throw new Exception('SSH login failed');
+                }
+
+                $distro = strtolower(trim($ssh->exec('cat /etc/os-release | grep -w "ID" | cut -d= -f2')));
+
+                switch ($distro) {
+                    case 'ubuntu':
+                    case 'debian':
+                    case 'centos':
+                    case 'rhel':
+                        $cpu = trim($ssh->exec("top -bn1 | grep 'Cpu(s)' | awk '{print $2}'"));
+                        break;
+                    default:
+                        $cpu = trim($ssh->exec("grep 'cpu ' /proc/stat | awk '{usage=($2+$4)*100/($2+$4+$5)} END {print usage}'"));
                 }
                 
-                $metrics = $this->getLocalMetrics();
-                $this->cachedLocalMetrics = $metrics;
-                $this->lastLocalMetricsTimestamp = $currentTime;
-                return $metrics;
+                $memInfo = $ssh->exec('free');
+                if (strpos($memInfo, 'available') !== false) {
+                    $memoryTotal = trim($ssh->exec("free | grep Mem | awk '{print $2}'"));
+                    $memoryAvailable = trim($ssh->exec("free | grep Mem | awk '{print $7}'"));
+                    $memoryUsage = ($memoryTotal - $memoryAvailable) / $memoryTotal * 100;
+                } else {
+                    $memoryTotal = trim($ssh->exec("free | grep Mem | awk '{print $2}'"));
+                    $memoryUsed = trim($ssh->exec("free | grep Mem | awk '{print $3}'"));
+                    $memoryUsage = ($memoryUsed / $memoryTotal) * 100;
+                }
+
+                $diskUsage = trim($ssh->exec("df / | tail -1 | awk '{print $5}' | sed 's/%//'"));
+
+                $uptime = trim($ssh->exec('uptime -p'));
+                $loadAvg = trim($ssh->exec("uptime | awk -F'load average:' '{print $2}'"));
+
+                $metrics = [
+                    'cpu_usage' => floatval($cpu),
+                    'ram_usage' => floatval($memoryUsage),
+                    'disk_usage' => floatval($diskUsage),
+                    'status' => 'online',
+                    'uptime' => $uptime,
+                    'load_average' => $loadAvg
+                ];
             }
-            
-            // For remote servers, check cache first
-            $serverId = $server->id;
-            $currentTime = time();
-            if (isset($this->cachedRemoteMetrics[$serverId]) && 
-                isset($this->lastRemoteMetricsTimestamp[$serverId]) && 
-                ($currentTime - $this->lastRemoteMetricsTimestamp[$serverId]) < $this->remoteCacheThreshold) {
-                Log::info("[Monitoring] Using cached metrics for {$server->ip_address} (last updated " . 
-                          ($currentTime - $this->lastRemoteMetricsTimestamp[$serverId]) . " seconds ago)");
-                return $this->cachedRemoteMetrics[$serverId];
+            // Update running_since and last_down_at for remote servers
+            if (!$this->isLocalhost($server->ip_address)) {
+                if (($metrics['status'] ?? 'offline') === 'online') {
+                    if (!$wasOnline || !$server->running_since) {
+                        // Server just came online
+                        if ($wasOnline === false && $server->last_down_at) {
+                            // Calculate downtime that just ended
+                            $downtimeDuration = now()->diffInSeconds($server->last_down_at);
+                            $server->total_downtime_seconds += $downtimeDuration;
+                        }
+                        $server->running_since = now();
+                        $server->last_down_at = null;
+                        $server->status = 'online';
+                        $server->save();
+                        \Log::info("[Monitoring] Server {$server->name} ({$server->ip_address}) is ONLINE. running_since set to now.");
+                    }
+                } else {
+                    if ($wasOnline || !$server->last_down_at) {
+                        // Server just went offline
+                        if ($wasOnline === true && $server->running_since) {
+                            // Calculate uptime that just ended
+                            $uptimeDuration = now()->diffInSeconds($server->running_since);
+                            $server->total_uptime_seconds += $uptimeDuration;
+                        }
+                        $server->last_down_at = now();
+                        $server->running_since = null;
+                        $server->status = 'offline';
+                        $server->save();
+                        \Log::warning("[Monitoring] Server {$server->name} ({$server->ip_address}) is OFFLINE. last_down_at set to now.");
+                    }
+                }
             }
-
-            Log::info("[Monitoring] Attempting SSH to {$server->ip_address}:{$server->ssh_port} as {$server->ssh_user}");
-            
-            // For remote servers, use SSH
-            $ssh = new SSH2($server->ip_address, $server->ssh_port ?? 22);
-            
-            if (!empty($server->ssh_key)) {
-                $key = PublicKeyLoader::load($server->ssh_key);
-                $success = $ssh->login($server->ssh_user, $key);
-            } else {
-                $success = $ssh->login($server->ssh_user, $server->ssh_password);
+            // Add uptime/downtime info
+            $metrics['running_since'] = $server->running_since;
+            $metrics['last_down_at'] = $server->last_down_at;
+            $metrics['total_uptime_seconds'] = $server->total_uptime_seconds;
+            $metrics['total_downtime_seconds'] = $server->total_downtime_seconds;
+            if ($metrics['status'] === 'online' && $server->running_since) {
+                $metrics['current_uptime'] = now()->diffInSeconds($server->running_since);
+            } elseif ($metrics['status'] === 'offline' && $server->last_down_at) {
+                $metrics['current_downtime'] = now()->diffInSeconds($server->last_down_at);
             }
-
-            if (!$success) {
-                // \Illuminate\Support\Facades\Log::error("[Monitoring] SSH login failed for {$server->ip_address} as {$server->ssh_user}");
-                throw new Exception('SSH login failed');
-            }
-
-            $distro = strtolower(trim($ssh->exec('cat /etc/os-release | grep -w "ID" | cut -d= -f2')));
-
-            switch ($distro) {
-                case 'ubuntu':
-                case 'debian':
-                case 'centos':
-                case 'rhel':
-                    $cpu = trim($ssh->exec("top -bn1 | grep 'Cpu(s)' | awk '{print $2}'"));
-                    break;
-                default:
-                    $cpu = trim($ssh->exec("grep 'cpu ' /proc/stat | awk '{usage=($2+$4)*100/($2+$4+$5)} END {print usage}'"));
-            }
-            
-            $memInfo = $ssh->exec('free');
-            if (strpos($memInfo, 'available') !== false) {
-                $memoryTotal = trim($ssh->exec("free | grep Mem | awk '{print $2}'"));
-                $memoryAvailable = trim($ssh->exec("free | grep Mem | awk '{print $7}'"));
-                $memoryUsage = ($memoryTotal - $memoryAvailable) / $memoryTotal * 100;
-            } else {
-                $memoryTotal = trim($ssh->exec("free | grep Mem | awk '{print $2}'"));
-                $memoryUsed = trim($ssh->exec("free | grep Mem | awk '{print $3}'"));
-                $memoryUsage = ($memoryUsed / $memoryTotal) * 100;
-            }
-
-            $diskUsage = trim($ssh->exec("df / | tail -1 | awk '{print $5}' | sed 's/%//'"));
-
-            $uptime = trim($ssh->exec('uptime -p'));
-            $loadAvg = trim($ssh->exec("uptime | awk -F'load average:' '{print $2}'"));
-
-            // \Illuminate\Support\Facades\Log::info("[Monitoring] Metrics for {$server->ip_address}: CPU={$cpu}, RAM={$memoryUsage}, DISK={$diskUsage}");
-            $metrics = [
-                'cpu_usage' => floatval($cpu),
-                'ram_usage' => floatval($memoryUsage),
-                'disk_usage' => floatval($diskUsage),
-                'status' => 'online',
-                'uptime' => $uptime,
-                'load_average' => $loadAvg
-            ];
-            
-            // Cache the metrics for this server
-            $this->cachedRemoteMetrics[$server->id] = $metrics;
-            $this->lastRemoteMetricsTimestamp[$server->id] = time();
-            
             return $metrics;
         } catch (Exception $e) {
-            $errorMetrics = [
+            // Server is offline due to connection failure
+            $wasOnline = $server->status === 'online';
+            
+            if ($wasOnline || !$server->last_down_at) {
+                // Server just went offline
+                if ($wasOnline === true && $server->running_since) {
+                    // Calculate uptime that just ended
+                    $uptimeDuration = now()->diffInSeconds($server->running_since);
+                    $server->total_uptime_seconds += $uptimeDuration;
+                }
+                $server->last_down_at = now();
+                $server->running_since = null;
+                $server->status = 'offline';
+                $server->save();
+                \Log::warning("[Monitoring] Server {$server->name} ({$server->ip_address}) went OFFLINE due to error: " . $e->getMessage());
+            }
+            
+            return [
                 'cpu_usage' => 0,
                 'ram_usage' => 0,
                 'disk_usage' => 0,
                 'status' => 'offline',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
+                'last_down_at' => $server->last_down_at,
+                'total_downtime_seconds' => $server->total_downtime_seconds,
+                'current_downtime' => $server->last_down_at ? now()->diffInSeconds($server->last_down_at) : null
             ];
-            
-            // Cache even error results to avoid hammering servers that are down
-            if (!$this->isLocalhost($server->ip_address)) {
-                $this->cachedRemoteMetrics[$server->id] = $errorMetrics;
-                $this->lastRemoteMetricsTimestamp[$server->id] = time();
-            } else {
-                $this->cachedLocalMetrics = $errorMetrics;
-                $this->lastLocalMetricsTimestamp = time();
-            }
-            
-            return $errorMetrics;
         }
     }
 
     /**
-     * Get metrics for localhost
+     * Get metrics for localhost (Windows/Laragon environment or Linux)
      */
-    private function getLocalMetrics()
+    private function getLocalMetrics(Server $server = null)
     {
+        if (PHP_OS_FAMILY === 'Linux') {
+            return $this->getLinuxLocalMetrics($server);
+        }
+        // Windows metrics collection
         try {
-            // We're always in a Linux environment in Docker.
+            $cpu = shell_exec('powershell "Get-WmiObject Win32_Processor | Measure-Object -Property LoadPercentage -Average | Select-Object -ExpandProperty Average"');
+            $cpuUsage = floatval(trim($cpu));
+
+            $memory = shell_exec('powershell "(Get-Counter \'\Memory\% Committed Bytes In Use\' -SampleInterval 1 -MaxSamples 1).CounterSamples.CookedValue"');
+            $memoryUsage = floatval(trim($memory));
+
+            $disk = shell_exec('powershell "Get-WmiObject Win32_LogicalDisk -Filter \"DeviceID=\'C:\'\" | Select-Object Size,FreeSpace | ConvertTo-Json"');
+            $diskInfo = json_decode($disk, true);
+            if ($diskInfo) {
+                $totalDisk = floatval($diskInfo['Size']);
+                $freeDisk = floatval($diskInfo['FreeSpace']);
+                $diskUsage = $totalDisk > 0 ? (($totalDisk - $freeDisk) / $totalDisk) * 100 : 0;
+            } else {
+                $diskUsage = 0;
+            }
             
-            // CPU Usage
-            $cpuStat1 = explode(' ', trim(shell_exec("cat /proc/stat | grep '^cpu '")));
-            sleep(1);
-            $cpuStat2 = explode(' ', trim(shell_exec("cat /proc/stat | grep '^cpu '")));
-
-            $prevIdle = (float)($cpuStat1[4] ?? 0) + (float)($cpuStat1[5] ?? 0);
-            $idle = (float)($cpuStat2[4] ?? 0) + (float)($cpuStat2[5] ?? 0);
-
-            $prevTotal = array_sum(array_slice($cpuStat1, 1));
-            $total = array_sum(array_slice($cpuStat2, 1));
-
-            $totalDiff = $total - $prevTotal;
-            $idleDiff = $idle - $prevIdle;
-
-            $cpuUsage = $totalDiff > 0 ? 100 * ($totalDiff - $idleDiff) / $totalDiff : 0;
-
-            // Memory Usage
-            $memInfo = shell_exec('free -m');
-            preg_match('/Mem:\s+(\d+)\s+(\d+)\s+(\d+)/', $memInfo, $matches);
-            $totalMem = $matches[1] ?? 0;
-            $usedMem = $matches[2] ?? 0;
-            $memoryUsage = $totalMem > 0 ? ($usedMem / $totalMem) * 100 : 0;
-
-            // Disk Usage
-            $diskUsage = (float)shell_exec("df / | tail -1 | awk '{print $5}' | sed 's/%//'");
-
-            return [
-                'cpu_usage' => round($cpuUsage, 2),
-                'ram_usage' => round($memoryUsage, 2),
-                'disk_usage' => round($diskUsage, 2),
+            $metrics = [
+                'cpu_usage' => $cpuUsage,
+                'ram_usage' => $memoryUsage,
+                'disk_usage' => $diskUsage,
                 'status' => 'online'
             ];
-        } catch (\Exception $e) {
-            \Illuminate\Support\Facades\Log::error("Error getting local metrics: " . $e->getMessage());
-            return [
+            
+            if ($server) {
+                // Handle downtime tracking for localhost
+                $wasOnline = $server->status === 'online';
+                
+                if ($metrics['status'] === 'online') {
+                    if (!$wasOnline || !$server->running_since) {
+                        // Server just came online
+                        if ($wasOnline === false && $server->last_down_at) {
+                            // Calculate downtime that just ended
+                            $downtimeDuration = now()->diffInSeconds($server->last_down_at);
+                            $server->total_downtime_seconds += $downtimeDuration;
+                        }
+                        $server->running_since = now();
+                        $server->last_down_at = null;
+                        $server->status = 'online';
+                        $server->save();
+                    }
+                } else {
+                    if ($wasOnline || !$server->last_down_at) {
+                        // Server just went offline
+                        if ($wasOnline === true && $server->running_since) {
+                            // Calculate uptime that just ended
+                            $uptimeDuration = now()->diffInSeconds($server->running_since);
+                            $server->total_uptime_seconds += $uptimeDuration;
+                        }
+                        $server->last_down_at = now();
+                        $server->running_since = null;
+                        $server->status = 'offline';
+                        $server->save();
+                    }
+                }
+                
+                $metrics['running_since'] = $server->running_since;
+                $metrics['last_down_at'] = $server->last_down_at;
+                $metrics['total_uptime_seconds'] = $server->total_uptime_seconds;
+                $metrics['total_downtime_seconds'] = $server->total_downtime_seconds;
+                if ($server->running_since) {
+                    $metrics['current_uptime'] = now()->diffInSeconds($server->running_since);
+                }
+            }
+            return $metrics;
+        } catch (\Throwable $e) {
+            $metrics = [
                 'cpu_usage' => 0,
                 'ram_usage' => 0,
                 'disk_usage' => 0,
-                'status' => 'error'
+                'status' => 'offline',
+                'error' => $e->getMessage(),
             ];
+            
+            if ($server) {
+                // Handle downtime tracking for failed localhost
+                $wasOnline = $server->status === 'online';
+                
+                if ($wasOnline || !$server->last_down_at) {
+                    // Server just went offline
+                    if ($wasOnline === true && $server->running_since) {
+                        // Calculate uptime that just ended
+                        $uptimeDuration = now()->diffInSeconds($server->running_since);
+                        $server->total_uptime_seconds += $uptimeDuration;
+                    }
+                    $server->last_down_at = now();
+                    $server->running_since = null;
+                    $server->status = 'offline';
+                    $server->save();
+                }
+                
+                $metrics['last_down_at'] = $server->last_down_at;
+                $metrics['total_downtime_seconds'] = $server->total_downtime_seconds;
+                $metrics['current_downtime'] = $server->last_down_at ? now()->diffInSeconds($server->last_down_at) : null;
+            }
+            
+            return $metrics;
         }
+    }
+
+    /**
+     * Get metrics for Linux localhost
+     */
+    private function getLinuxLocalMetrics(Server $server = null)
+    {
+        $cpuUsage = 0;
+        $memoryUsage = 0;
+        $diskUsage = 0;
+        $uptime = '';
+        $loadAvg = '';
+
+        // CPU Usage
+        if (file_exists('/proc/stat')) {
+            $stat1 = file_get_contents('/proc/stat');
+            usleep(100000); // 100ms
+            $stat2 = file_get_contents('/proc/stat');
+            $cpu1 = preg_split('/\s+/', explode("\n", $stat1)[0]);
+            $cpu2 = preg_split('/\s+/', explode("\n", $stat2)[0]);
+            if (count($cpu1) >= 5 && count($cpu2) >= 5) {
+                $total1 = array_sum(array_slice($cpu1, 1, 7));
+                $total2 = array_sum(array_slice($cpu2, 1, 7));
+                $idle1 = $cpu1[4];
+                $idle2 = $cpu2[4];
+                $totalDiff = $total2 - $total1;
+                $idleDiff = $idle2 - $idle1;
+                if ($totalDiff > 0) {
+                    $cpuUsage = round((1 - ($idleDiff / $totalDiff)) * 100, 2);
+                }
+            }
+        }
+        // Fallback if /proc/stat fails
+        if ($cpuUsage === 0) {
+            $load = sys_getloadavg();
+            if ($load && is_array($load)) {
+                // This is not percent, but gives an idea (1-min load average)
+                $cpuUsage = $load[0];
+            }
+        }
+
+        // Memory Usage
+        if (file_exists('/proc/meminfo')) {
+            $meminfo = file_get_contents('/proc/meminfo');
+            if (preg_match('/MemTotal:\\s+(\\d+)/i', $meminfo, $totalMatch)) {
+                $total = (int)$totalMatch[1];
+                if ($total > 0) {
+                    if (preg_match('/MemAvailable:\\s+(\\d+)/i', $meminfo, $availMatch)) {
+                        $available = (int)$availMatch[1];
+                        $memoryUsage = round(($total - $available) / $total * 100, 2);
+                    } elseif (
+                        preg_match('/MemFree:\\s+(\\d+)/i', $meminfo, $freeMatch) &&
+                        preg_match('/Buffers:\\s+(\\d+)/i', $meminfo, $buffersMatch) &&
+                        preg_match('/Cached:\\s+(\\d+)/i', $meminfo, $cachedMatch)
+                    ) {
+                        $free = (int)$freeMatch[1];
+                        $buffers = (int)$buffersMatch[1];
+                        $cached = (int)$cachedMatch[1];
+                        $used = $total - $free - $buffers - $cached;
+                        $memoryUsage = round($used / $total * 100, 2);
+                    }
+                }
+            }
+        }
+
+        // Disk Usage
+        $total = @disk_total_space('/');
+        $free = @disk_free_space('/');
+        if ($total > 0) {
+            $diskUsage = round(($total - $free) / $total * 100, 2);
+        }
+
+        // Uptime
+        if (file_exists('/proc/uptime')) {
+            $uptime_seconds = (int)floatval(explode(' ', file_get_contents('/proc/uptime'))[0]);
+            $uptime = 'up ' . gmdate('H:i:s', $uptime_seconds);
+        }
+        // Load Average
+        if (file_exists('/proc/loadavg')) {
+            $loadAvg = trim(file_get_contents('/proc/loadavg'));
+        }
+
+        $metrics = [
+            'cpu_usage' => $cpuUsage,
+            'ram_usage' => $memoryUsage,
+            'disk_usage' => $diskUsage,
+            'status' => 'online',
+            'uptime' => $uptime,
+            'load_average' => $loadAvg
+        ];
+        
+        if ($server) {
+            // Handle downtime tracking for Linux localhost
+            $wasOnline = $server->status === 'online';
+            
+            if ($metrics['status'] === 'online') {
+                if (!$wasOnline || !$server->running_since) {
+                    // Server just came online
+                    if ($wasOnline === false && $server->last_down_at) {
+                        // Calculate downtime that just ended
+                        $downtimeDuration = now()->diffInSeconds($server->last_down_at);
+                        $server->total_downtime_seconds += $downtimeDuration;
+                    }
+                    $server->running_since = now();
+                    $server->last_down_at = null;
+                    $server->status = 'online';
+                    $server->save();
+                }
+            } else {
+                if ($wasOnline || !$server->last_down_at) {
+                    // Server just went offline
+                    if ($wasOnline === true && $server->running_since) {
+                        // Calculate uptime that just ended
+                        $uptimeDuration = now()->diffInSeconds($server->running_since);
+                        $server->total_uptime_seconds += $uptimeDuration;
+                    }
+                    $server->last_down_at = now();
+                    $server->running_since = null;
+                    $server->status = 'offline';
+                    $server->save();
+                }
+            }
+            
+            $metrics['running_since'] = $server->running_since;
+            $metrics['last_down_at'] = $server->last_down_at;
+            $metrics['total_uptime_seconds'] = $server->total_uptime_seconds;
+            $metrics['total_downtime_seconds'] = $server->total_downtime_seconds;
+            if ($server->running_since) {
+                $metrics['current_uptime'] = now()->diffInSeconds($server->running_since);
+            }
+        }
+        return $metrics;
     }
 
     /**
@@ -193,333 +393,93 @@ class ServerMonitoringService
      */
     private function isLocalhost($ip)
     {
-        return in_array($ip, ['127.0.0.1', 'localhost', '::1', 'host.docker.internal']);
+        return in_array($ip, ['127.0.0.1', 'localhost', '::1']);
     }
+
     /**
      * Check and log thresholds for server metrics
      */
     public function checkAndLogThresholds(Server $server, array $metrics)
     {
-        // Define default critical thresholds for infrastructure monitoring
-        $defaultThresholds = [
-            'CPU' => ['warning' => 70, 'critical' => 85],
-            'RAM' => ['warning' => 75, 'critical' => 90],
-            'Disk' => ['warning' => 80, 'critical' => 95],
-            'Load' => ['warning' => 2.0, 'critical' => 4.0]
-        ];
+        $thresholds = \App\Models\AlertThreshold::where('server_id', $server->id)->get();
 
-        $customThresholds = \App\Models\AlertThreshold::where('server_id', $server->id)->get();
+        foreach ($thresholds as $threshold) {
+            $currentValue = null;
+            $metricKey = '';
 
-        // Process each metric type
-        foreach (['CPU', 'RAM', 'Disk', 'Load'] as $metricType) {
-            $currentValue = $this->getMetricValue($metrics, $metricType);
-            if ($currentValue === null) continue;
-
-            // Get custom threshold or use default
-            $customThreshold = $customThresholds->where('metric_type', $metricType)->first();
-            $thresholds = $customThreshold ? 
-                ['warning' => $customThreshold->threshold_value, 'critical' => $customThreshold->threshold_value * 1.2] :
-                $defaultThresholds[$metricType];
-
-            // Check for violations and create detailed logs
-            $this->checkThresholdViolation($server, $metricType, $currentValue, $thresholds, $metrics);
-        }
-    }
-
-    /**
-     * Get metric value by type
-     */
-    private function getMetricValue(array $metrics, string $metricType)
-    {
-        switch ($metricType) {
-            case 'CPU':
-                return $metrics['cpu_usage'] ?? null;
-            case 'RAM':
-                return $metrics['ram_usage'] ?? null;
-            case 'Disk':
-                return $metrics['disk_usage'] ?? null;
-            case 'Load':
-                $loadStr = $metrics['load_average'] ?? '0.0';
-                $loadValues = explode(',', $loadStr);
-                return floatval(trim($loadValues[0] ?? '0'));
-            default:
-                return null;
-        }
-    }
-
-    /**
-     * Check threshold violation and create comprehensive log
-     */
-    private function checkThresholdViolation(Server $server, string $metricType, float $currentValue, array $thresholds, array $allMetrics)
-    {
-        $violationType = null;
-        $level = 'info';
-
-        if ($currentValue >= $thresholds['critical']) {
-            $violationType = 'critical';
-            $level = 'error';
-        } elseif ($currentValue >= $thresholds['warning']) {
-            $violationType = 'warning';
-            $level = 'warning';
-        }
-
-        // Only log if there's a threshold violation
-        if ($violationType) {
-            $message = $this->generateThresholdMessage($metricType, $currentValue, $thresholds[$violationType], $violationType);
-            $context = $this->generateThresholdContext($server, $metricType, $currentValue, $thresholds, $allMetrics, $violationType);
-
-            \App\Models\Log::create([
-                'server_id' => $server->id,
-                'level' => $level,
-                'source' => 'infrastructure_monitor',
-                'log_level' => strtoupper($level),
-                'message' => $message,
-                'context' => $context,
-            ]);
-
-            // Log to Laravel's system log for debugging
-            \Illuminate\Support\Facades\Log::warning(
-                "Infrastructure Alert: {$server->name} - {$message}"
-            );
-        }
-    }
-
-    /**
-     * Generate detailed threshold violation message
-     */
-    private function generateThresholdMessage(string $metricType, float $currentValue, float $threshold, string $violationType)
-    {
-        $unit = in_array($metricType, ['CPU', 'RAM', 'Disk']) ? '%' : '';
-        $exceedAmount = $currentValue - $threshold;
-        $exceedPercent = round(($exceedAmount / $threshold) * 100, 1);
-
-        $severityText = $violationType === 'critical' ? 'CRITICAL SPIKE' : 'WARNING SPIKE';
-        
-        return sprintf(
-            '%s: %s %s reached %.2f%s (%.2f%s above %s threshold of %.2f%s)',
-            $severityText,
-            $metricType,
-            $metricType === 'Load' ? 'average' : 'usage',
-            $currentValue,
-            $unit,
-            $exceedAmount,
-            $unit,
-            $violationType,
-            $threshold,
-            $unit
-        );
-    }
-
-    /**
-     * Generate comprehensive context for infrastructure analysis
-     */
-    private function generateThresholdContext(Server $server, string $metricType, float $currentValue, array $thresholds, array $allMetrics, string $violationType)
-    {
-        $context = [
-            // Violation details
-            'violation_type' => $violationType,
-            'metric_type' => strtolower($metricType),
-            'current_value' => $currentValue,
-            'threshold_value' => $thresholds[$violationType],
-            'warning_threshold' => $thresholds['warning'],
-            'critical_threshold' => $thresholds['critical'],
-            'exceed_percentage' => round((($currentValue - $thresholds[$violationType]) / $thresholds[$violationType]) * 100, 2),
-            
-            // Server information
-            'server_name' => $server->name,
-            'server_ip' => $server->ip_address,
-            'server_id' => $server->id,
-            
-            // All current metrics for analysis
-            'cpu_usage' => $allMetrics['cpu_usage'] ?? 0,
-            'memory_usage' => $allMetrics['ram_usage'] ?? 0,
-            'disk_usage' => $allMetrics['disk_usage'] ?? 0,
-            'load_average' => $allMetrics['load_average'] ?? '0.0',
-            'server_status' => $allMetrics['status'] ?? 'unknown',
-            
-            // Infrastructure analysis
-            'spike_severity' => $this->calculateSpikeSeverity($currentValue, $thresholds),
-            'affected_services' => $this->predictAffectedServices($metricType, $currentValue),
-            'recommended_actions' => $this->getRecommendedActions($metricType, $violationType, $currentValue),
-            'predicted_impact' => $this->predictImpact($metricType, $violationType, $allMetrics),
-            
-            // Timing
-            'detected_at' => now()->toISOString(),
-            'uptime' => $allMetrics['uptime'] ?? 'unknown'
-        ];
-
-        return $context;
-    }
-
-    /**
-     * Calculate spike severity for infrastructure analysis
-     */
-    private function calculateSpikeSeverity(float $currentValue, array $thresholds)
-    {
-        $criticalThreshold = $thresholds['critical'];
-        if ($currentValue >= $criticalThreshold * 1.5) return 'extreme';
-        if ($currentValue >= $criticalThreshold * 1.3) return 'severe';
-        if ($currentValue >= $criticalThreshold) return 'high';
-        return 'moderate';
-    }
-
-    /**
-     * Predict affected services based on metric type and severity
-     */
-    private function predictAffectedServices(string $metricType, float $currentValue)
-    {
-        $services = [];
-        
-        switch ($metricType) {
-            case 'CPU':
-                if ($currentValue >= 90) {
-                    $services = ['Web Applications', 'Database Queries', 'Background Jobs', 'API Responses'];
-                } elseif ($currentValue >= 80) {
-                    $services = ['Web Applications', 'Database Performance'];
-                }
-                break;
-            case 'RAM':
-                if ($currentValue >= 95) {
-                    $services = ['System Stability', 'Application Memory', 'Cache Systems', 'Database Buffer'];
-                } elseif ($currentValue >= 85) {
-                    $services = ['Application Performance', 'Cache Systems'];
-                }
-                break;
-            case 'Disk':
-                if ($currentValue >= 98) {
-                    $services = ['File System', 'Log Files', 'Database Storage', 'Application Uploads'];
-                } elseif ($currentValue >= 90) {
-                    $services = ['Log Rotation', 'Temporary Files'];
-                }
-                break;
-            case 'Load':
-                if ($currentValue >= 5.0) {
-                    $services = ['System Responsiveness', 'Process Scheduling', 'I/O Operations'];
-                } elseif ($currentValue >= 3.0) {
-                    $services = ['System Performance'];
-                }
-                break;
-        }
-        
-        return $services;
-    }
-
-    /**
-     * Get recommended actions for infrastructure teams
-     */
-    private function getRecommendedActions(string $metricType, string $violationType, float $currentValue)
-    {
-        $actions = [];
-        
-        switch ($metricType) {
-            case 'CPU':
-                if ($violationType === 'critical') {
-                    $actions = [
-                        'Scale CPU resources immediately',
-                        'Identify and optimize CPU-intensive processes',
-                        'Implement load balancing if not already in place',
-                        'Check for infinite loops or runaway processes'
-                    ];
-                } else {
-                    $actions = [
-                        'Monitor CPU usage trends',
-                        'Review recent deployments and changes',
-                        'Consider CPU optimization'
-                    ];
-                }
-                break;
-            case 'RAM':
-                if ($violationType === 'critical') {
-                    $actions = [
-                        'Add more RAM or scale memory resources',
-                        'Identify memory leaks in applications',
-                        'Restart memory-intensive services if safe',
-                        'Clear unnecessary cache and buffers'
-                    ];
-                } else {
-                    $actions = [
-                        'Monitor memory usage patterns',
-                        'Review application memory consumption',
-                        'Plan for memory expansion'
-                    ];
-                }
-                break;
-            case 'Disk':
-                if ($violationType === 'critical') {
-                    $actions = [
-                        'Free up disk space immediately',
-                        'Implement log rotation policies',
-                        'Move or archive old files',
-                        'Expand disk capacity'
-                    ];
-                } else {
-                    $actions = [
-                        'Clean up temporary files',
-                        'Review disk usage patterns',
-                        'Plan for storage expansion'
-                    ];
-                }
-                break;
-            case 'Load':
-                if ($violationType === 'critical') {
-                    $actions = [
-                        'Reduce system load immediately',
-                        'Check for I/O bottlenecks',
-                        'Scale server resources',
-                        'Optimize running processes'
-                    ];
-                } else {
-                    $actions = [
-                        'Monitor load average trends',
-                        'Review system performance',
-                        'Check for resource contention'
-                    ];
-                }
-                break;
-        }
-        
-        return $actions;
-    }
-
-    /**
-     * Predict impact on infrastructure
-     */
-    private function predictImpact(string $metricType, string $violationType, array $allMetrics)
-    {
-        $impact = [
-            'immediate_risk' => 'low',
-            'service_degradation' => false,
-            'potential_downtime' => false,
-            'user_impact' => 'minimal'
-        ];
-        
-        if ($violationType === 'critical') {
-            $impact['immediate_risk'] = 'high';
-            $impact['service_degradation'] = true;
-            
-            switch ($metricType) {
+            // Map metric types to actual metric keys
+            switch ($threshold->metric_type) {
                 case 'CPU':
+                    $metricKey = 'cpu_usage';
+                    $currentValue = $metrics['cpu_usage'] ?? null;
+                    break;
                 case 'RAM':
-                    $impact['potential_downtime'] = true;
-                    $impact['user_impact'] = 'severe';
+                    $metricKey = 'ram_usage';
+                    $currentValue = $metrics['ram_usage'] ?? null;
                     break;
                 case 'Disk':
-                    if (($allMetrics['disk_usage'] ?? 0) >= 98) {
-                        $impact['potential_downtime'] = true;
-                        $impact['user_impact'] = 'severe';
-                    } else {
-                        $impact['user_impact'] = 'moderate';
-                    }
+                    $metricKey = 'disk_usage';
+                    $currentValue = $metrics['disk_usage'] ?? null;
                     break;
                 case 'Load':
-                    $impact['user_impact'] = 'moderate';
+                    $metricKey = 'load_average';
+                    $loadStr = $metrics['load_average'] ?? '0.0';
+                    // Extract first load average value (1-minute)
+                    $loadValues = explode(',', $loadStr);
+                    $currentValue = floatval(trim($loadValues[0] ?? '0'));
                     break;
             }
-        } elseif ($violationType === 'warning') {
-            $impact['immediate_risk'] = 'medium';
-            $impact['user_impact'] = 'minor';
+
+            if ($currentValue !== null && $currentValue > $threshold->threshold_value) {
+                $level = $this->determineLevelBySeverity($threshold->metric_type, $currentValue, $threshold->threshold_value);
+                
+                \App\Models\Log::create([
+                    'server_id' => $server->id,
+                    'level' => $level,
+                    'source' => 'threshold_monitor',
+                    'log_level' => strtoupper($level),
+                    'message' => sprintf(
+                        '%s %s exceeded threshold: %.2f%s (threshold: %.2f%s)',
+                        ucfirst($threshold->metric_type),
+                        $threshold->metric_type === 'Load' ? 'average' : 'usage',
+                        $currentValue,
+                        $threshold->metric_type === 'Load' ? '' : '%',
+                        $threshold->threshold_value,
+                        $threshold->metric_type === 'Load' ? '' : '%'
+                    ),
+                    'context' => [
+                        'metric_type' => $threshold->metric_type,
+                        'current_value' => $currentValue,
+                        'threshold_value' => $threshold->threshold_value,
+                        'server_name' => $server->name,
+                        'server_ip' => $server->ip_address,
+                        'all_metrics' => $metrics
+                    ],
+                ]);
+                
+                // Log to Laravel's system log as well for debugging
+                \Illuminate\Support\Facades\Log::warning(
+                    "Threshold exceeded for {$server->name}: {$threshold->metric_type} = {$currentValue}"
+                );
+            }
         }
+    }
+
+    /**
+     * Determine log level based on how much the threshold was exceeded
+     */
+    private function determineLevelBySeverity($metricType, $currentValue, $thresholdValue)
+    {
+        $exceedPercentage = ($currentValue - $thresholdValue) / $thresholdValue * 100;
         
-        return $impact;
+        if ($exceedPercentage >= 50) { // 50% over threshold
+            return 'critical';
+        } elseif ($exceedPercentage >= 25) { // 25% over threshold
+            return 'error';
+        } elseif ($exceedPercentage >= 10) { // 10% over threshold
+            return 'warning';
+        } else {
+            return 'notice';
+        }
     }
 }

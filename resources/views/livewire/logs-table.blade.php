@@ -48,9 +48,9 @@
     <!-- Actions & Filters -->
     <div class="bg-white/90 rounded-xl p-4 mb-4 shadow border flex flex-wrap gap-3 items-center justify-between">
         <div class="flex flex-wrap gap-3 items-center flex-1">
-            <input wire:model.debounce.300ms="search"
+            <input wire:model.lazy="search"
                 type="search"
-                placeholder="Search logs..."
+                placeholder="Search logs, levels, servers..."
                 class="flex-1 min-w-[200px] rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-200 text-sm px-3 py-2" />
 
             <select wire:model="selectedLevel"
@@ -75,13 +75,13 @@
             </button>
         </div>
         <div class="flex items-center gap-2 mt-2 md:mt-0">
-            <button type="button" wire:click="exportCsv"
-                class="bg-green-600 text-black text-xs px-4 py-2 rounded hover:bg-green-700 flex items-center font-medium border border-green-700">
+            <a href="{{ route('logs.export', request()->query()) }}"
+                class="bg-green-600 text-white text-xs px-4 py-2 rounded hover:bg-green-700 flex items-center font-medium border border-green-700">
                 <i class="fas fa-download mr-2"></i> Export CSV
-            </button>
+            </a>
 
             <button type="button" onclick="window.print()"
-                class="bg-blue-600 text-white text-xs px-4 py-2 rounded hover:bg-blue-700 flex items-center font-medium border border-blue-700">
+                class="bg-gray-600 text-white text-xs px-4 py-2 rounded hover:bg-gray-700 flex items-center font-medium border border-gray-700">
                 <i class="fas fa-print mr-2"></i> Print
             </button>
 
@@ -111,17 +111,21 @@
                             <span class="font-mono">{{ $log->created_at->format('Y-m-d H:i:s') }}</span>
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap">
-                            @if($log->level === 'error')
+                            @if($log->level === 'error' || $log->level === 'critical')
                                 <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-red-100 text-red-800 border border-red-200">
-                                    <i class="fas fa-fire mr-1"></i> CRITICAL
+                                    <i class="fas fa-exclamation-triangle mr-1"></i> CRITICAL
                                 </span>
-                            @elseif($log->level === 'warning')
+                            @elseif($log->level === 'warning' || $log->level === 'warn')
                                 <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-yellow-100 text-yellow-800 border border-yellow-200">
                                     <i class="fas fa-exclamation-triangle mr-1"></i> WARNING
                                 </span>
-                            @else
+                            @elseif($log->level === 'info' || $log->level === 'information')
                                 <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-800 border border-blue-200">
                                     <i class="fas fa-info-circle mr-1"></i> INFO
+                                </span>
+                            @else
+                                <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-800 border border-gray-200">
+                                    <i class="fas fa-question-circle mr-1"></i> {{ strtoupper($log->level) }}
                                 </span>
                             @endif
                         </td>
@@ -176,9 +180,14 @@
                         <td class="px-6 py-4 whitespace-nowrap text-xs">
                             <div class="flex gap-2">
                                 <a href="{{ route('logs.show', $log) }}" 
-                                   class="@if($log->level === 'error') bg-red-600 hover:bg-red-700 @elseif($log->level === 'warning') bg-yellow-600 hover:bg-yellow-700 @else bg-blue-600 hover:bg-blue-700 @endif text-white px-3 py-1 rounded text-xs font-medium transition">
-                                    <i class="fas fa-search-plus mr-1"></i> 
-                                    @if($alertType) Analyze @else View @endif
+                                   class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-xs font-medium transition"
+                                   title="View Details">
+                                    <i class="fas fa-eye mr-1"></i> View
+                                </a>
+                                <a href="{{ route('logs.report', $log) }}" 
+                                   class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1 rounded text-xs font-medium transition"
+                                   title="View Full Report">
+                                    <i class="fas fa-file-alt mr-1"></i> Report
                                 </a>
                             </div>
                         </td>
