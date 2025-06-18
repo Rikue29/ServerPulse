@@ -1,8 +1,8 @@
-<div class="space-y-6">
+<div class="space-y-4">
 
     <!-- Critical Alerts Summary -->
-    <div class="bg-gradient-to-r from-red-50 to-orange-50 border border-red-200 rounded-xl p-6">
-        <div class="flex items-center justify-between mb-4">
+    <div class="bg-gradient-to-r from-red-50 to-orange-50 border border-red-200 rounded-xl p-4">
+        <div class="flex items-center justify-between mb-3">
             <div class="flex items-center space-x-3">
                 <div class="p-2 bg-red-100 rounded-full">
                     <i class="fas fa-exclamation-triangle text-red-600"></i>
@@ -14,7 +14,7 @@
             </div>
         </div>
         
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div class="bg-white/60 rounded-lg p-4 border border-red-100">
                 <div class="flex items-center justify-between">
                     <div>
@@ -46,15 +46,15 @@
     </div>
 
     <!-- Actions & Filters -->
-    <div class="bg-white/90 rounded-xl p-4 mb-4 shadow border flex flex-wrap gap-3 items-center justify-between">
-        <div class="flex flex-wrap gap-3 items-center flex-1">
+    <div class="bg-white/90 rounded-xl p-3 mb-3 shadow border flex flex-wrap gap-2 items-center justify-between">
+        <div class="flex flex-wrap gap-2 items-center flex-1">
             <input wire:model.lazy="search"
                 type="search"
                 placeholder="Search logs, levels, servers..."
-                class="flex-1 min-w-[200px] rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-200 text-sm px-3 py-2" />
+                class="flex-1 min-w-[200px] rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-200 text-sm px-3 py-1.5" />
 
             <select wire:model="selectedLevel"
-                class="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-200 text-sm">
+                class="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-200 text-sm py-1.5">
                 <option value="">All Levels</option>
                 <option value="error">Errors</option>
                 <option value="warning">Warnings</option>
@@ -62,7 +62,7 @@
             </select>
 
             <select wire:model="selectedServer"
-                class="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-200 text-sm">
+                class="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-200 text-sm py-1.5">
                 <option value="">All Servers</option>
                 @foreach($servers as $server)
                     <option value="{{ $server->id }}">{{ $server->name }}</option>
@@ -70,22 +70,22 @@
             </select>
 
             <button wire:click="clearFilters"
-                class="text-gray-600 text-xs hover:text-red-600 px-2 py-2 flex items-center border rounded bg-gray-100">
+                class="text-gray-600 text-xs hover:text-red-600 px-2 py-1.5 flex items-center border rounded bg-gray-100">
                 <i class="fas fa-times-circle mr-1"></i> Clear
             </button>
         </div>
-        <div class="flex items-center gap-2 mt-2 md:mt-0">
+        <div class="flex items-center gap-2">
             <a href="{{ route('logs.export', request()->query()) }}"
-                class="bg-green-600 text-white text-xs px-4 py-2 rounded hover:bg-green-700 flex items-center font-medium border border-green-700">
+                class="bg-green-600 text-white text-xs px-3 py-1.5 rounded hover:bg-green-700 flex items-center font-medium border border-green-700">
                 <i class="fas fa-download mr-2"></i> Export CSV
             </a>
 
             <button type="button" onclick="window.print()"
-                class="bg-gray-600 text-white text-xs px-4 py-2 rounded hover:bg-gray-700 flex items-center font-medium border border-gray-700">
+                class="bg-gray-600 text-white text-xs px-3 py-1.5 rounded hover:bg-gray-700 flex items-center font-medium border border-gray-700">
                 <i class="fas fa-print mr-2"></i> Print
             </button>
 
-            <label class="inline-flex items-center ml-2 text-xs">
+            <label class="inline-flex items-center text-xs">
                 <input type="checkbox" wire:model="autoRefresh" class="form-checkbox rounded text-indigo-600" />
                 <span class="ml-2">Auto Refresh</span>
             </label>
