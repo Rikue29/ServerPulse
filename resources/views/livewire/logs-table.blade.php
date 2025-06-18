@@ -56,9 +56,9 @@
             <select wire:model="selectedLevel"
                 class="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-200 text-sm py-1.5">
                 <option value="">All Levels</option>
-                <option value="error">Errors</option>
+                <option value="error">Errors & Critical</option>
                 <option value="warning">Warnings</option>
-                <option value="info">Info</option>
+                <option value="info">Info & Notice</option>
             </select>
 
             <select wire:model="selectedServer"
@@ -67,6 +67,14 @@
                 @foreach($servers as $server)
                     <option value="{{ $server->id }}">{{ $server->name }}</option>
                 @endforeach
+            </select>
+
+            <select wire:model="perPage"
+                class="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-200 text-sm py-1.5">
+                <option value="10">10 per page</option>
+                <option value="25">25 per page</option>
+                <option value="50">50 per page</option>
+                <option value="100">100 per page</option>
             </select>
 
             <button wire:click="clearFilters"
@@ -208,7 +216,12 @@
 
         <!-- Pagination -->
         @if($logs->hasPages())
-            <div class="px-6 py-4 border-t border-gray-200">
+            <div class="px-6 py-4 border-t border-gray-200 bg-gray-50">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="text-sm text-gray-700">
+                        Showing {{ $logs->firstItem() ?? 0 }} to {{ $logs->lastItem() ?? 0 }} of {{ $logs->total() }} results
+                    </div>
+                </div>
                 {{ $logs->links() }}
             </div>
         @endif

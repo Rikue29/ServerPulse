@@ -138,16 +138,49 @@ class ServerMonitoringService
             $metrics['running_since'] = $server->running_since;
             $metrics['last_down_at'] = $server->last_down_at;
 
-            // Calculate network speed
+            // Calculate simple network health metrics (more reliable than speed)
+            $metrics['network_health'] = 'unknown';
+            $metrics['ping_response'] = 0;
+            $metrics['network_activity'] = 'low';
+            
+            // Simple ping test for network health
+            try {
+                if ($this->isLocalhost($server->ip_address)) {
+                    $metrics['network_health'] = 'excellent';
+                    $metrics['ping_response'] = 1;
+                } else {
+                    // For remote servers, do a simple ping test
+                    $pingResult = shell_exec("ping -c 1 -W 3 " . escapeshellarg($server->ip_address) . " 2>/dev/null");
+                    if (strpos($pingResult, '1 received') !== false) {
+                        $metrics['network_health'] = 'good';
+                        $metrics['ping_response'] = 1;
+                    } else {
+                        $metrics['network_health'] = 'poor';
+                        $metrics['ping_response'] = 0;
+                    }
+                }
+            } catch (Exception $e) {
+                $metrics['network_health'] = 'unknown';
+                $metrics['ping_response'] = 0;
+            }
+            
+            // Determine network activity level based on recent transfers
             if ($server->last_checked_at) {
-                $timeDiff = now()->diffInSeconds($server->last_checked_at);
-                if ($timeDiff > 0) {
-                    $rxDiff = $metrics['network_rx'] - $server->network_rx;
-                    $txDiff = $metrics['network_tx'] - $server->network_tx;
-                    // speed in bytes per second
-                    $metrics['network_speed'] = ($rxDiff + $txDiff) / $timeDiff;
+                $rxDiff = $metrics['network_rx'] - $server->network_rx;
+                $txDiff = $metrics['network_tx'] - $server->network_tx;
+                $totalDiff = $rxDiff + $txDiff;
+                
+                if ($totalDiff > 1000000) { // > 1MB
+                    $metrics['network_activity'] = 'high';
+                } elseif ($totalDiff > 100000) { // > 100KB
+                    $metrics['network_activity'] = 'medium';
+                } else {
+                    $metrics['network_activity'] = 'low';
                 }
             }
+            
+            // Update last_checked_at
+            \DB::table('servers')->where('id', $server->id)->update(['last_checked_at' => \DB::raw('CURRENT_TIMESTAMP')]);
 
             return $metrics;
         } catch (Exception $e) {
@@ -426,6 +459,9 @@ class ServerMonitoringService
             if ($currentValue !== null && $currentValue > $threshold->threshold_value) {
                 $level = $this->determineLevelBySeverity($threshold->metric_type, $currentValue, $threshold->threshold_value);
                 
+                // Use correct timezone for log creation
+                $currentTime = \Carbon\Carbon::now('Asia/Kuala_Lumpur')->utc();
+                
                 \App\Models\Log::create([
                     'server_id' => $server->id,
                     'level' => $level,
@@ -448,6 +484,8 @@ class ServerMonitoringService
                         'server_ip' => $server->ip_address,
                         'all_metrics' => $metrics
                     ],
+                    'created_at' => $currentTime,
+                    'updated_at' => $currentTime,
                 ]);
                 
                 // Log to Laravel's system log as well for debugging

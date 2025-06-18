@@ -6,6 +6,7 @@ use Illuminate\Console\Command;
 use App\Events\ServerStatusUpdated;
 use App\Models\Server;
 use App\Services\ServerMonitoringService;
+use Carbon\Carbon;
 
 class MonitorServer extends Command
 {
@@ -53,16 +54,19 @@ class MonitorServer extends Command
             
             $server->save();
 
-            // Create a performance log for every check
-            \App\Models\Log::create([
+            // Create a performance log for every check with correct timezone
+            $currentTime = Carbon::now('Asia/Kuala_Lumpur')->utc();
+            \App\Models\PerformanceLog::create([
                 'server_id' => $server->id,
-                'level' => 'info',
-                'log_level' => 'INFO',
-                'source' => 'performance_log',
-                'message' => 'Server metrics collected.',
-                'context' => [
-                    'all_metrics' => $metrics
-                ],
+                'cpu_usage' => $metrics['cpu_usage'] ?? 0,
+                'ram_usage' => $metrics['ram_usage'] ?? 0,
+                'disk_usage' => $metrics['disk_usage'] ?? 0,
+                'network_rx' => $metrics['network_rx'] ?? 0,
+                'network_tx' => $metrics['network_tx'] ?? 0,
+                'disk_io_read' => $metrics['disk_io_read'] ?? 0,
+                'disk_io_write' => $metrics['disk_io_write'] ?? 0,
+                'created_at' => $currentTime,
+                'updated_at' => $currentTime,
             ]);
 
             // 3. Check for threshold breaches

@@ -31,16 +31,21 @@
                 </div>
                 <p class="text-xs text-gray-500 mt-1">Current</p>
             </div>
-            <!-- Network Usage -->
+            <!-- Network Health -->
             <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
                 <div class="flex items-center justify-between">
-                    <h3 class="text-sm font-medium text-gray-500">Network Speed</h3>
-                    <i class="fas fa-network-wired text-indigo-500"></i>
+                    <h3 class="text-sm font-medium text-gray-500">Network Activity</h3>
+                    <i class="fas fa-network-wired text-green-500"></i>
                 </div>
                 <div class="mt-4">
-                    <span class="text-3xl font-bold text-gray-900">{{ number_format($summary['network_usage'] / 1024 / 1024, 2) }} MB/s</span>
+                    <span class="text-3xl font-bold text-gray-900">{{ $summary['current_network_activity'] }}</span>
                 </div>
-                <p class="text-xs text-gray-500 mt-1">Current</p>
+                <p class="text-xs text-gray-500 mt-1">Current Activity Level</p>
+                <div class="mt-2">
+                    <div class="w-full bg-gray-200 rounded-full h-2">
+                        <div class="bg-green-500 h-2 rounded-full" style="width: {{ $summary['current_network_activity'] }}%"></div>
+                    </div>
+                </div>
             </div>
             <!-- Storage Usage -->
             <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
@@ -63,6 +68,72 @@
                     <span class="text-3xl font-bold text-gray-900">{{ number_format($summary['resource_allocation'], 1) }}%</span>
                 </div>
                 <p class="text-xs text-gray-500 mt-1">Current</p>
+            </div>
+        </div>
+
+        <!-- Additional Metrics Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+            <!-- Disk Usage -->
+            <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                <div class="flex items-center justify-between">
+                    <h3 class="text-sm font-medium text-gray-500">Disk Usage</h3>
+                    <i class="fas fa-hdd text-purple-500"></i>
+                </div>
+                <div class="mt-4">
+                    <span class="text-3xl font-bold text-gray-900">{{ number_format($summary['storage_usage'], 1) }}%</span>
+                </div>
+                <p class="text-xs text-gray-500 mt-1">Current</p>
+            </div>
+            <!-- Network Throughput -->
+            <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                <div class="flex items-center justify-between">
+                    <h3 class="text-sm font-medium text-gray-500">Network Throughput</h3>
+                    <i class="fas fa-tachometer-alt text-pink-500"></i>
+                </div>
+                <div class="mt-4">
+                    <span class="text-3xl font-bold text-gray-900">
+                        @if(!empty($chart_data['network_throughput']))
+                            {{ number_format(end($chart_data['network_throughput']), 1) }}
+                        @else
+                            0
+                        @endif
+                    </span>
+                </div>
+                <p class="text-xs text-gray-500 mt-1">KB/s</p>
+            </div>
+            <!-- Response Time -->
+            <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                <div class="flex items-center justify-between">
+                    <h3 class="text-sm font-medium text-gray-500">Response Time</h3>
+                    <i class="fas fa-clock text-green-500"></i>
+                </div>
+                <div class="mt-4">
+                    <span class="text-3xl font-bold text-gray-900">
+                        @if(!empty($chart_data['response_time']))
+                            {{ number_format(end($chart_data['response_time']), 1) }}
+                        @else
+                            0
+                        @endif
+                    </span>
+                </div>
+                <p class="text-xs text-gray-500 mt-1">ms</p>
+            </div>
+            <!-- System Uptime -->
+            <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                <div class="flex items-center justify-between">
+                    <h3 class="text-sm font-medium text-gray-500">System Uptime</h3>
+                    <i class="fas fa-server text-blue-500"></i>
+                </div>
+                <div class="mt-4">
+                    <span class="text-3xl font-bold text-gray-900">
+                        @if(!empty($chart_data['system_uptime']))
+                            {{ number_format(end($chart_data['system_uptime']), 1) }}
+                        @else
+                            0
+                        @endif
+                    </span>
+                </div>
+                <p class="text-xs text-gray-500 mt-1">hours</p>
             </div>
         </div>
 
@@ -96,11 +167,27 @@
                         </label>
                          <label class="flex items-center">
                             <input type="checkbox" id="networkToggle" class="form-checkbox h-4 w-4 text-green-600" checked>
-                            <span class="ml-2 text-gray-700">Network Traffic (MB/s)</span>
+                            <span class="ml-2 text-gray-700">Network Activity</span>
                         </label>
                         <label class="flex items-center">
-                            <input type="checkbox" id="diskToggle" class="form-checkbox h-4 w-4 text-orange-600" checked>
+                            <input type="checkbox" id="diskToggle" class="form-checkbox h-4 w-4 text-orange-600">
                             <span class="ml-2 text-gray-700">Disk I/O (MB/s)</span>
+                        </label>
+                        <label class="flex items-center">
+                            <input type="checkbox" id="diskUsageToggle" class="form-checkbox h-4 w-4 text-purple-600">
+                            <span class="ml-2 text-gray-700">Disk Usage (%)</span>
+                        </label>
+                        <label class="flex items-center">
+                            <input type="checkbox" id="networkThroughputToggle" class="form-checkbox h-4 w-4 text-pink-600">
+                            <span class="ml-2 text-gray-700">Network Throughput (KB/s)</span>
+                        </label>
+                        <label class="flex items-center">
+                            <input type="checkbox" id="responseTimeToggle" class="form-checkbox h-4 w-4 text-green-600">
+                            <span class="ml-2 text-gray-700">Response Time (ms)</span>
+                        </label>
+                        <label class="flex items-center">
+                            <input type="checkbox" id="systemUptimeToggle" class="form-checkbox h-4 w-4 text-blue-600">
+                            <span class="ml-2 text-gray-700">System Uptime (h)</span>
                         </label>
                     </div>
                 </div>
@@ -141,8 +228,8 @@
                             tension: 0.4
                         },
                         {
-                            label: 'Network Traffic',
-                            data: chartData.network_traffic,
+                            label: 'Network Activity',
+                            data: chartData.network_activity,
                             borderColor: 'rgba(16, 185, 129, 1)',
                             backgroundColor: 'rgba(16, 185, 129, 0.2)',
                             borderWidth: 2,
@@ -154,6 +241,46 @@
                             data: chartData.disk_io,
                             borderColor: 'rgba(249, 115, 22, 1)',
                             backgroundColor: 'rgba(249, 115, 22, 0.2)',
+                            borderWidth: 2,
+                            pointRadius: 0,
+                            tension: 0.4,
+                            hidden: true
+                        },
+                        {
+                            label: 'Disk Usage',
+                            data: chartData.disk_usage,
+                            borderColor: 'rgba(168, 85, 247, 1)',
+                            backgroundColor: 'rgba(168, 85, 247, 0.2)',
+                            borderWidth: 2,
+                            pointRadius: 0,
+                            tension: 0.4,
+                            hidden: true
+                        },
+                        {
+                            label: 'Network Throughput',
+                            data: chartData.network_throughput,
+                            borderColor: 'rgba(236, 72, 153, 1)',
+                            backgroundColor: 'rgba(236, 72, 153, 0.2)',
+                            borderWidth: 2,
+                            pointRadius: 0,
+                            tension: 0.4,
+                            hidden: true
+                        },
+                        {
+                            label: 'Response Time',
+                            data: chartData.response_time,
+                            borderColor: 'rgba(34, 197, 94, 1)',
+                            backgroundColor: 'rgba(34, 197, 94, 0.2)',
+                            borderWidth: 2,
+                            pointRadius: 0,
+                            tension: 0.4,
+                            hidden: true
+                        },
+                        {
+                            label: 'System Uptime',
+                            data: chartData.system_uptime,
+                            borderColor: 'rgba(59, 130, 246, 1)',
+                            backgroundColor: 'rgba(59, 130, 246, 0.2)',
                             borderWidth: 2,
                             pointRadius: 0,
                             tension: 0.4,
@@ -207,6 +334,10 @@
             document.getElementById('memoryToggle').addEventListener('change', () => toggleDataset(1, performanceChart));
             document.getElementById('networkToggle').addEventListener('change', () => toggleDataset(2, performanceChart));
             document.getElementById('diskToggle').addEventListener('change', () => toggleDataset(3, performanceChart));
+            document.getElementById('diskUsageToggle').addEventListener('change', () => toggleDataset(4, performanceChart));
+            document.getElementById('networkThroughputToggle').addEventListener('change', () => toggleDataset(5, performanceChart));
+            document.getElementById('responseTimeToggle').addEventListener('change', () => toggleDataset(6, performanceChart));
+            document.getElementById('systemUptimeToggle').addEventListener('change', () => toggleDataset(7, performanceChart));
         });
     </script>
 @endsection
