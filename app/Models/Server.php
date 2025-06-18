@@ -25,10 +25,15 @@ class Server extends Model
         'created_by',
         'status',
         'last_checked_at',
+        'last_down_at',
+        'running_since',
+        'total_uptime_seconds',
+        'total_downtime_seconds',
         'ssh_user',
         'ssh_password',
         'ssh_key',
-        'ssh_port'
+        'ssh_port',
+        'system_uptime'
     ];
 
     /**
@@ -41,7 +46,11 @@ class Server extends Model
         'ram_usage' => 'float',
         'disk_usage' => 'float',
         'response_time' => 'float',
-        'last_checked_at' => 'datetime'
+        'last_checked_at' => 'datetime',
+        'last_down_at' => 'datetime',
+        'running_since' => 'datetime',
+        'total_uptime_seconds' => 'integer',
+        'total_downtime_seconds' => 'integer'
     ];
 
     /**

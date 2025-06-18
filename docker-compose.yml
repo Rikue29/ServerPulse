@@ -17,36 +17,36 @@ services:
 
   php:
     container_name: php
-    image: php:8.2-fpm # Ensure this PHP version is compatible with your Laravel version
-    # platform: linux/amd64 # Uncomment if needed for Apple Silicon
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
     volumes:
-      - .:/var/www/html/ # Mount the entire project directory into PHP-FPM
+      - .:/var/www/html/
     networks:
       - webapp-network
     environment:
-      - PHP_FPM_LISTEN=9000
+      - PHP_FPM_LISTEN=0.0.0.0:9000
       - PHP_ERROR_REPORTING=E_ALL
     dns:
       - 8.8.8.8
       - 8.8.4.4
+
+  node:
+    image: node:18
+    volumes:
+      - .:/var/www/html
+    working_dir: /var/www/html
     command: >
-      bash -c "apt-get update && apt-get install -y 
-      libzip-dev 
-      unzip 
-      git 
-      && docker-php-ext-install pdo pdo_mysql zip opcache
-      && curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer 
-      && cd /var/www/html 
-      && mkdir -p storage/framework/{sessions,views,cache}
-      && mkdir -p storage/logs
-      && chmod -R 775 storage
-      && chmod -R 775 bootstrap/cache
-      && composer install --no-interaction
-      && php artisan key:generate --force
-      && php artisan config:cache
-      && php artisan route:cache
-      && php artisan view:cache
-      && php-fpm"
+      bash -c "npm install
+      && npm run build
+      && npm run dev"
+    networks:
+      - webapp-network
+    ports:
+      - "5173:5173"
+    environment:
+      - HOST=0.0.0.0
+      - CHOKIDAR_USEPOLLING=true
 
   mysql:
     image: mysql:8.0

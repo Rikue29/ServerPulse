@@ -3,8 +3,8 @@
 namespace App\Providers;
 
 use Illuminate\Support\ServiceProvider;
-use Livewire\Livewire; // ✅ Import Livewire
-use App\Http\Livewire\LogsTable; // ✅ Import your component class
+use Livewire\Livewire;
+use App\Livewire\LogsTable;
 
 class AppServiceProvider extends ServiceProvider
 {

@@ -1,7 +1,6 @@
 @extends('layouts.app')
 
 @section('content')
-<div class="min-h-screen bg-gray-50">
     <!-- Header -->
     <div class="bg-white border-b border-gray-200 px-6 py-4">
         <div class="flex items-center justify-between">
@@ -18,7 +17,6 @@
         </div>
     </div>
 
-    <!-- Content Area -->
     <div class="p-6">
         @if (session('success'))
             <div class="mb-6 bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded-lg relative" role="alert">
@@ -79,9 +77,16 @@
                                             </div>
                                         </td>
                                         <td class="px-6 py-4 whitespace-nowrap" data-col="status">
-                                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full {{ $server->status === 'online' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800' }}">
-                                                {{ ucfirst($server->status ?? 'offline') }}
+                                            @php $metrics = $serverMetrics[$server->id] ?? []; @endphp
+                                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full {{ ($metrics['status'] ?? $server->status) === 'online' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800' }}">
+                                                {{ ucfirst($metrics['status'] ?? $server->status ?? 'offline') }}
                                             </span>
+                                            <br>
+                                            @if(($metrics['status'] ?? $server->status) === 'online' && !empty($metrics['current_uptime']))
+                                                <span class="text-xs text-gray-500">Uptime: {{ \Carbon\CarbonInterval::seconds($metrics['current_uptime'])->cascade()->forHumans(['short' => true]) }}</span>
+                                            @elseif(($metrics['status'] ?? $server->status) !== 'online' && !empty($metrics['current_downtime']))
+                                                <span class="text-xs text-gray-500">Downtime: {{ \Carbon\CarbonInterval::seconds($metrics['current_downtime'])->cascade()->forHumans(['short' => true]) }}</span>
+                                            @endif
                                         </td>
                                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ $server->location }}</td>
                                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ ucfirst($server->environment) }}</td>
@@ -171,5 +176,4 @@
             </div>
         </div>
     </div>
-</div>
 @endsection
