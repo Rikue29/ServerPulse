@@ -24,14 +24,13 @@ class ServerMonitoringService
                 $ssh = new SSH2($server->ip_address, $server->ssh_port ?? 22);
                 
                 if (!empty($server->ssh_key)) {
-                    $key = PublicKeyLoader::load($server->ssh_key);
+                    $key = PublicKeyLoader::load(trim($server->ssh_key));
                     $success = $ssh->login($server->ssh_user, $key);
                 } else {
                     $success = $ssh->login($server->ssh_user, $server->ssh_password);
                 }
 
                 if (!$success) {
-                    // \Illuminate\Support\Facades\Log::error("[Monitoring] SSH login failed for {$server->ip_address} as {$server->ssh_user}");
                     throw new Exception('SSH login failed');
                 }
 
@@ -52,16 +51,17 @@ class ServerMonitoringService
                 if (strpos($memInfo, 'available') !== false) {
                     $memoryTotal = trim($ssh->exec("free | grep Mem | awk '{print $2}'"));
                     $memoryAvailable = trim($ssh->exec("free | grep Mem | awk '{print $7}'"));
-                    $memoryUsage = ($memoryTotal - $memoryAvailable) / $memoryTotal * 100;
+                    $memoryUsage = ($memoryTotal > 0) ? ($memoryTotal - $memoryAvailable) / $memoryTotal * 100 : 0;
                 } else {
                     $memoryTotal = trim($ssh->exec("free | grep Mem | awk '{print $2}'"));
                     $memoryUsed = trim($ssh->exec("free | grep Mem | awk '{print $3}'"));
-                    $memoryUsage = ($memoryUsed / $memoryTotal) * 100;
+                    $memoryUsage = ($memoryTotal > 0) ? ($memoryUsed / $memoryTotal) * 100 : 0;
                 }
 
                 $diskUsage = trim($ssh->exec("df / | tail -1 | awk '{print $5}' | sed 's/%//'"));
 
-                $uptime = trim($ssh->exec('uptime -p'));
+                $uptimeSeconds = floatval(trim($ssh->exec("awk '{print $1}' /proc/uptime")));
+                $systemUptime = $this->formatUptimeFromSeconds($uptimeSeconds);
                 $loadAvg = trim($ssh->exec("uptime | awk -F'load average:' '{print $2}'"));
 
                 $metrics = [
@@ -69,69 +69,47 @@ class ServerMonitoringService
                     'ram_usage' => floatval($memoryUsage),
                     'disk_usage' => floatval($diskUsage),
                     'status' => 'online',
-                    'uptime' => $uptime,
+                    'system_uptime' => $systemUptime,
                     'load_average' => $loadAvg
                 ];
             }
-            // Update running_since and last_down_at for remote servers
-            if (!$this->isLocalhost($server->ip_address)) {
-                if (($metrics['status'] ?? 'offline') === 'online') {
-                    if (!$wasOnline || !$server->running_since) {
-                        // Server just came online
-                        if ($wasOnline === false && $server->last_down_at) {
-                            // Calculate downtime that just ended
-                            $downtimeDuration = now()->diffInSeconds($server->last_down_at);
-                            $server->total_downtime_seconds += $downtimeDuration;
-                        }
-                        $server->running_since = now();
-                        $server->last_down_at = null;
-                        $server->status = 'online';
-                        $server->save();
-                        \Log::info("[Monitoring] Server {$server->name} ({$server->ip_address}) is ONLINE. running_since set to now.");
-                    }
-                } else {
-                    if ($wasOnline || !$server->last_down_at) {
-                        // Server just went offline
-                        if ($wasOnline === true && $server->running_since) {
-                            // Calculate uptime that just ended
-                            $uptimeDuration = now()->diffInSeconds($server->running_since);
-                            $server->total_uptime_seconds += $uptimeDuration;
-                        }
-                        $server->last_down_at = now();
-                        $server->running_since = null;
-                        $server->status = 'offline';
-                        $server->save();
-                        \Log::warning("[Monitoring] Server {$server->name} ({$server->ip_address}) is OFFLINE. last_down_at set to now.");
-                    }
+
+            // EXACTLY copy the working downtime pattern for uptime
+            if (($metrics['status'] ?? 'offline') === 'online') {
+                if (!$wasOnline || !$server->running_since) {
+                    $server->running_since = now();
+                    $server->last_down_at = null;
+                    $server->status = 'online';
+                    $server->save();
                 }
+                // This is the key part - exactly like downtime calculation
+                $metrics['current_uptime'] = $server->running_since ? now()->diffInSeconds($server->running_since) : null;
+            } else {
+                if ($wasOnline || !$server->last_down_at) {
+                    $server->last_down_at = now();
+                    $server->running_since = null;
+                    $server->status = 'offline';
+                    $server->save();
+                }
+                // This is the working downtime calculation - don't touch it
+                $metrics['current_downtime'] = $server->last_down_at ? now()->diffInSeconds($server->last_down_at) : null;
             }
-            // Add uptime/downtime info
+
+            // Basic metrics that we know work
+            $metrics['status'] = $server->status;
             $metrics['running_since'] = $server->running_since;
             $metrics['last_down_at'] = $server->last_down_at;
-            $metrics['total_uptime_seconds'] = $server->total_uptime_seconds;
-            $metrics['total_downtime_seconds'] = $server->total_downtime_seconds;
-            if ($metrics['status'] === 'online' && $server->running_since) {
-                $metrics['current_uptime'] = now()->diffInSeconds($server->running_since);
-            } elseif ($metrics['status'] === 'offline' && $server->last_down_at) {
-                $metrics['current_downtime'] = now()->diffInSeconds($server->last_down_at);
-            }
+
             return $metrics;
         } catch (Exception $e) {
-            // Server is offline due to connection failure
+            // Leave the catch block exactly as is - it works
             $wasOnline = $server->status === 'online';
             
             if ($wasOnline || !$server->last_down_at) {
-                // Server just went offline
-                if ($wasOnline === true && $server->running_since) {
-                    // Calculate uptime that just ended
-                    $uptimeDuration = now()->diffInSeconds($server->running_since);
-                    $server->total_uptime_seconds += $uptimeDuration;
-                }
                 $server->last_down_at = now();
                 $server->running_since = null;
                 $server->status = 'offline';
                 $server->save();
-                \Log::warning("[Monitoring] Server {$server->name} ({$server->ip_address}) went OFFLINE due to error: " . $e->getMessage());
             }
             
             return [
@@ -141,7 +119,6 @@ class ServerMonitoringService
                 'status' => 'offline',
                 'error' => $e->getMessage(),
                 'last_down_at' => $server->last_down_at,
-                'total_downtime_seconds' => $server->total_downtime_seconds,
                 'current_downtime' => $server->last_down_at ? now()->diffInSeconds($server->last_down_at) : null
             ];
         }
@@ -157,70 +134,23 @@ class ServerMonitoringService
         }
         // Windows metrics collection
         try {
-            $cpu = shell_exec('powershell "Get-WmiObject Win32_Processor | Measure-Object -Property LoadPercentage -Average | Select-Object -ExpandProperty Average"');
-            $cpuUsage = floatval(trim($cpu));
-
-            $memory = shell_exec('powershell "(Get-Counter \'\Memory\% Committed Bytes In Use\' -SampleInterval 1 -MaxSamples 1).CounterSamples.CookedValue"');
-            $memoryUsage = floatval(trim($memory));
-
-            $disk = shell_exec('powershell "Get-WmiObject Win32_LogicalDisk -Filter \"DeviceID=\'C:\'\" | Select-Object Size,FreeSpace | ConvertTo-Json"');
-            $diskInfo = json_decode($disk, true);
-            if ($diskInfo) {
-                $totalDisk = floatval($diskInfo['Size']);
-                $freeDisk = floatval($diskInfo['FreeSpace']);
-                $diskUsage = $totalDisk > 0 ? (($totalDisk - $freeDisk) / $totalDisk) * 100 : 0;
-            } else {
-                $diskUsage = 0;
-            }
+            // Windows metrics with system uptime
+            $cpu = shell_exec('powershell "(Get-Counter -Counter \"\\Processor(_Total)\\% Processor Time\" -SampleInterval 1 -MaxSamples 1).CounterSamples.CookedValue"');
+            $memory = shell_exec('powershell "(Get-Counter -Counter \"\\Memory\\% Committed Bytes In Use\" -SampleInterval 1 -MaxSamples 1).CounterSamples.CookedValue"');
+            $disk = shell_exec('powershell "Get-WmiObject Win32_LogicalDisk -Filter \"DeviceID=\'C:\'\" | ForEach-Object { ($_.Size - $_.FreeSpace) / $_.Size * 100 }"');
             
-            $metrics = [
-                'cpu_usage' => $cpuUsage,
-                'ram_usage' => $memoryUsage,
-                'disk_usage' => $diskUsage,
-                'status' => 'online'
+            // Final robust uptime calculation for Windows that returns total seconds as an integer
+            $uptimeCmd = 'powershell "[int]((Get-Date) - (Get-CimInstance -ClassName Win32_OperatingSystem).LastBootUpTime).TotalSeconds"';
+            $uptimeSeconds = floatval(trim(shell_exec($uptimeCmd)));
+            $systemUptime = $this->formatUptimeFromSeconds($uptimeSeconds);
+
+            return [
+                'cpu_usage' => floatval(trim($cpu)),
+                'ram_usage' => floatval(trim($memory)),
+                'disk_usage' => floatval(trim($disk)),
+                'system_uptime' => $systemUptime,
+                'status' => 'online',
             ];
-            
-            if ($server) {
-                // Handle downtime tracking for localhost
-                $wasOnline = $server->status === 'online';
-                
-                if ($metrics['status'] === 'online') {
-                    if (!$wasOnline || !$server->running_since) {
-                        // Server just came online
-                        if ($wasOnline === false && $server->last_down_at) {
-                            // Calculate downtime that just ended
-                            $downtimeDuration = now()->diffInSeconds($server->last_down_at);
-                            $server->total_downtime_seconds += $downtimeDuration;
-                        }
-                        $server->running_since = now();
-                        $server->last_down_at = null;
-                        $server->status = 'online';
-                        $server->save();
-                    }
-                } else {
-                    if ($wasOnline || !$server->last_down_at) {
-                        // Server just went offline
-                        if ($wasOnline === true && $server->running_since) {
-                            // Calculate uptime that just ended
-                            $uptimeDuration = now()->diffInSeconds($server->running_since);
-                            $server->total_uptime_seconds += $uptimeDuration;
-                        }
-                        $server->last_down_at = now();
-                        $server->running_since = null;
-                        $server->status = 'offline';
-                        $server->save();
-                    }
-                }
-                
-                $metrics['running_since'] = $server->running_since;
-                $metrics['last_down_at'] = $server->last_down_at;
-                $metrics['total_uptime_seconds'] = $server->total_uptime_seconds;
-                $metrics['total_downtime_seconds'] = $server->total_downtime_seconds;
-                if ($server->running_since) {
-                    $metrics['current_uptime'] = now()->diffInSeconds($server->running_since);
-                }
-            }
-            return $metrics;
         } catch (\Throwable $e) {
             $metrics = [
                 'cpu_usage' => 0,
@@ -327,9 +257,10 @@ class ServerMonitoringService
         }
 
         // Uptime
+        $systemUptime = 'N/A';
         if (file_exists('/proc/uptime')) {
             $uptime_seconds = (int)floatval(explode(' ', file_get_contents('/proc/uptime'))[0]);
-            $uptime = 'up ' . gmdate('H:i:s', $uptime_seconds);
+            $systemUptime = $this->formatUptimeFromSeconds($uptime_seconds);
         }
         // Load Average
         if (file_exists('/proc/loadavg')) {
@@ -341,50 +272,10 @@ class ServerMonitoringService
             'ram_usage' => $memoryUsage,
             'disk_usage' => $diskUsage,
             'status' => 'online',
-            'uptime' => $uptime,
+            'system_uptime' => $systemUptime,
             'load_average' => $loadAvg
         ];
         
-        if ($server) {
-            // Handle downtime tracking for Linux localhost
-            $wasOnline = $server->status === 'online';
-            
-            if ($metrics['status'] === 'online') {
-                if (!$wasOnline || !$server->running_since) {
-                    // Server just came online
-                    if ($wasOnline === false && $server->last_down_at) {
-                        // Calculate downtime that just ended
-                        $downtimeDuration = now()->diffInSeconds($server->last_down_at);
-                        $server->total_downtime_seconds += $downtimeDuration;
-                    }
-                    $server->running_since = now();
-                    $server->last_down_at = null;
-                    $server->status = 'online';
-                    $server->save();
-                }
-            } else {
-                if ($wasOnline || !$server->last_down_at) {
-                    // Server just went offline
-                    if ($wasOnline === true && $server->running_since) {
-                        // Calculate uptime that just ended
-                        $uptimeDuration = now()->diffInSeconds($server->running_since);
-                        $server->total_uptime_seconds += $uptimeDuration;
-                    }
-                    $server->last_down_at = now();
-                    $server->running_since = null;
-                    $server->status = 'offline';
-                    $server->save();
-                }
-            }
-            
-            $metrics['running_since'] = $server->running_since;
-            $metrics['last_down_at'] = $server->last_down_at;
-            $metrics['total_uptime_seconds'] = $server->total_uptime_seconds;
-            $metrics['total_downtime_seconds'] = $server->total_downtime_seconds;
-            if ($server->running_since) {
-                $metrics['current_uptime'] = now()->diffInSeconds($server->running_since);
-            }
-        }
         return $metrics;
     }
 
@@ -481,5 +372,39 @@ class ServerMonitoringService
         } else {
             return 'notice';
         }
+    }
+
+    private function formatUptimeFromSeconds(float $seconds): string
+    {
+        if ($seconds < 1) {
+            return '0s';
+        }
+
+        $days = floor($seconds / (3600 * 24));
+        $secondsPart = $seconds % (3600 * 24);
+        $hours = floor($secondsPart / 3600);
+        $secondsPart %= 3600;
+        $minutes = floor($secondsPart / 60);
+        $remainingSeconds = floor($secondsPart % 60);
+
+        $parts = [];
+        if ($days > 0) {
+            $parts[] = "{$days}d";
+        }
+        if ($hours > 0) {
+            $parts[] = "{$hours}h";
+        }
+        if ($minutes > 0) {
+            $parts[] = "{$minutes}m";
+        }
+        if ($remainingSeconds > 0) {
+            $parts[] = "{$remainingSeconds}s";
+        }
+
+        if (empty($parts)) {
+            return '0s';
+        }
+
+        return implode(' ', $parts);
     }
 }

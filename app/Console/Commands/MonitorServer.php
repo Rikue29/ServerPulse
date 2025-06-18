@@ -22,23 +22,50 @@ class MonitorServer extends Command
     public function handle()
     {
         $servers = Server::all();
+
         foreach ($servers as $server) {
+            $wasOnline = $server->status === 'online';
+            
+            // 1. Get raw metrics from our stateless service
             $metrics = $this->monitoringService->getMetrics($server);
+            $isOnline = ($metrics['status'] ?? 'offline') === 'online';
+
+            // 2. Update server state directly in this command
+            $server->cpu_usage = $metrics['cpu_usage'] ?? 0;
+            $server->ram_usage = $metrics['ram_usage'] ?? 0;
+            $server->disk_usage = $metrics['disk_usage'] ?? 0;
+            $server->system_uptime = $metrics['system_uptime'] ?? null;
+            $server->last_checked_at = now();
+            $server->status = $metrics['status'] ?? 'offline';
+
+            if ($isOnline && !$wasOnline) {
+                // Server just came online
+                $server->last_down_at = null;
+            } elseif (!$isOnline && $wasOnline) {
+                // Server just went offline
+                $server->last_down_at = now();
+            }
+            
+            $server->save();
+
+            // 3. Check for threshold breaches
             $this->monitoringService->checkAndLogThresholds($server, $metrics);
+
+            // 4. Broadcast the updated status
             $payload = [
                 'server_id' => $server->id,
                 'name' => $server->name,
                 'ip_address' => $server->ip_address,
-                'cpu_usage' => $metrics['cpu_usage'] ?? null,
-                'ram_usage' => $metrics['ram_usage'] ?? null,
-                'disk_usage' => $metrics['disk_usage'] ?? null,
-                'status' => $metrics['status'] ?? 'offline',
-                'last_checked_at' => now()->toDateTimeString(),
-                'last_down_at' => $metrics['last_down_at'] ?? null,
-                'running_since' => $metrics['running_since'] ?? null,
-                'current_uptime' => $metrics['current_uptime'] ?? null,
-                'current_downtime' => $metrics['current_downtime'] ?? null,
+                'cpu_usage' => $server->cpu_usage,
+                'ram_usage' => $server->ram_usage,
+                'disk_usage' => $server->disk_usage,
+                'status' => $server->status,
+                'system_uptime' => $server->system_uptime,
+                'last_down_at' => $server->last_down_at?->toDateTimeString(),
+                'current_uptime' => $server->running_since ? $server->running_since->diffInSeconds(now()) : null,
+                'current_downtime' => $server->last_down_at ? $server->last_down_at->diffInSeconds(now()) : 0,
             ];
+            
             broadcast(new ServerStatusUpdated($payload));
             $this->info("Broadcasted status for {$server->name} ({$server->ip_address})");
         }

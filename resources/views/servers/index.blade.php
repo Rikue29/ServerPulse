@@ -77,16 +77,16 @@
                                             </div>
                                         </td>
                                         <td class="px-6 py-4 whitespace-nowrap" data-col="status">
-                                            @php $metrics = $serverMetrics[$server->id] ?? []; @endphp
-                                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full {{ ($metrics['status'] ?? $server->status) === 'online' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800' }}">
-                                                {{ ucfirst($metrics['status'] ?? $server->status ?? 'offline') }}
+                                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full {{ $server->status === 'online' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800' }}">
+                                                {{ ucfirst($server->status) }}
                                             </span>
-                                            <br>
-                                            @if(($metrics['status'] ?? $server->status) === 'online' && !empty($metrics['current_uptime']))
-                                                <span class="text-xs text-gray-500">Uptime: {{ \Carbon\CarbonInterval::seconds($metrics['current_uptime'])->cascade()->forHumans(['short' => true]) }}</span>
-                                            @elseif(($metrics['status'] ?? $server->status) !== 'online' && !empty($metrics['current_downtime']))
-                                                <span class="text-xs text-gray-500">Downtime: {{ \Carbon\CarbonInterval::seconds($metrics['current_downtime'])->cascade()->forHumans(['short' => true]) }}</span>
-                                            @endif
+                                            <div class="server-uptime-info text-xs text-gray-500 mt-1">
+                                                @if($server->status === 'online')
+                                                    Uptime: {{ $server->system_uptime ?? 'N/A' }}
+                                                @else
+                                                    Downtime: {{ $server->current_downtime_formatted ?? 'N/A' }}
+                                                @endif
+                                            </div>
                                         </td>
                                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ $server->location }}</td>
                                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ ucfirst($server->environment) }}</td>
