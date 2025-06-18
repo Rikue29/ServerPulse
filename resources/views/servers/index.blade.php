@@ -1,7 +1,6 @@
 @extends('layouts.app')
 
 @section('content')
-<div class="min-h-screen bg-gray-50">
     <!-- Header -->
     <div class="bg-white border-b border-gray-200 px-6 py-4">
         <div class="flex items-center justify-between">
@@ -18,7 +17,6 @@
         </div>
     </div>
 
-    <!-- Content Area -->
     <div class="p-6">
         @if (session('success'))
             <div class="mb-6 bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded-lg relative" role="alert">
@@ -178,5 +176,4 @@
             </div>
         </div>
     </div>
-</div>
 @endsection
