@@ -37,6 +37,11 @@ class MonitorServer extends Command
             $server->system_uptime = $metrics['system_uptime'] ?? null;
             $server->last_checked_at = now();
             $server->status = $metrics['status'] ?? 'offline';
+            $server->network_rx = $metrics['network_rx'] ?? 0;
+            $server->network_tx = $metrics['network_tx'] ?? 0;
+            $server->network_speed = $metrics['network_speed'] ?? 0;
+            $server->disk_io_read = $metrics['disk_io_read'] ?? 0;
+            $server->disk_io_write = $metrics['disk_io_write'] ?? 0;
 
             if ($isOnline && !$wasOnline) {
                 // Server just came online
@@ -47,6 +52,18 @@ class MonitorServer extends Command
             }
             
             $server->save();
+
+            // Create a performance log for every check
+            \App\Models\Log::create([
+                'server_id' => $server->id,
+                'level' => 'info',
+                'log_level' => 'INFO',
+                'source' => 'performance_log',
+                'message' => 'Server metrics collected.',
+                'context' => [
+                    'all_metrics' => $metrics
+                ],
+            ]);
 
             // 3. Check for threshold breaches
             $this->monitoringService->checkAndLogThresholds($server, $metrics);

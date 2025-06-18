@@ -37,6 +37,11 @@ class UpdateServerMetrics extends Command
                     'disk_usage' => $metrics['disk_usage'],
                     'status' => $metrics['status'],
                     'last_checked_at' => now(),
+                    'network_rx' => $metrics['network_rx'] ?? 0,
+                    'network_tx' => $metrics['network_tx'] ?? 0,
+                    'network_speed' => $metrics['network_speed'] ?? 0,
+                    'disk_io_read' => $metrics['disk_io_read'] ?? 0,
+                    'disk_io_write' => $metrics['disk_io_write'] ?? 0,
                 ];
                 
                 // Preserve downtime tracking fields that were set by the monitoring service

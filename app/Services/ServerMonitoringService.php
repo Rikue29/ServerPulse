@@ -22,6 +22,10 @@ class ServerMonitoringService
                 $metrics = $this->getLocalMetrics($server);
             } else {
                 $ssh = new SSH2($server->ip_address, $server->ssh_port ?? 22);
+                $rx = 0;
+                $tx = 0;
+                $ioRead = 0;
+                $ioWrite = 0;
                 
                 if (!empty($server->ssh_key)) {
                     $key = PublicKeyLoader::load(trim($server->ssh_key));
@@ -64,13 +68,47 @@ class ServerMonitoringService
                 $systemUptime = $this->formatUptimeFromSeconds($uptimeSeconds);
                 $loadAvg = trim($ssh->exec("uptime | awk -F'load average:' '{print $2}'"));
 
+                // Network traffic - dynamically find the default interface
+                $defaultInterface = trim($ssh->exec("ip route | grep default | awk '{print $5}'"));
+                if (empty($defaultInterface)) {
+                    $defaultInterface = 'eth0'; // Fallback
+                }
+                
+                $netDev = $ssh->exec('cat /proc/net/dev');
+                $lines = explode("\n", $netDev);
+                foreach ($lines as $line) {
+                    if (strpos($line, $defaultInterface . ':') !== false) {
+                        $parts = preg_split('/\s+/', trim($line));
+                        $rx = (int)$parts[1];
+                        $tx = (int)$parts[9];
+                        break;
+                    }
+                }
+
+                // Disk I/O
+                $diskStats = $ssh->exec('cat /proc/diskstats');
+                $lines = explode("\n", $diskStats);
+                foreach ($lines as $line) {
+                    // Look for common disk names like sda, vda, nvme0n1
+                    if (preg_match('/(sd|vd|nvme[0-9]n[0-9])\s/i', $line)) {
+                        $parts = preg_split('/\s+/', trim($line));
+                        $ioRead += (int)$parts[5] * 512; // sectors read to bytes
+                        $ioWrite += (int)$parts[9] * 512; // sectors written to bytes
+                        // We will sum all primary disks, but you could configure a specific one
+                    }
+                }
+
                 $metrics = [
                     'cpu_usage' => floatval($cpu),
                     'ram_usage' => floatval($memoryUsage),
                     'disk_usage' => floatval($diskUsage),
                     'status' => 'online',
                     'system_uptime' => $systemUptime,
-                    'load_average' => $loadAvg
+                    'load_average' => $loadAvg,
+                    'network_rx' => $rx,
+                    'network_tx' => $tx,
+                    'disk_io_read' => $ioRead,
+                    'disk_io_write' => $ioWrite,
                 ];
             }
 
@@ -100,6 +138,17 @@ class ServerMonitoringService
             $metrics['running_since'] = $server->running_since;
             $metrics['last_down_at'] = $server->last_down_at;
 
+            // Calculate network speed
+            if ($server->last_checked_at) {
+                $timeDiff = now()->diffInSeconds($server->last_checked_at);
+                if ($timeDiff > 0) {
+                    $rxDiff = $metrics['network_rx'] - $server->network_rx;
+                    $txDiff = $metrics['network_tx'] - $server->network_tx;
+                    // speed in bytes per second
+                    $metrics['network_speed'] = ($rxDiff + $txDiff) / $timeDiff;
+                }
+            }
+
             return $metrics;
         } catch (Exception $e) {
             // Leave the catch block exactly as is - it works
@@ -119,7 +168,12 @@ class ServerMonitoringService
                 'status' => 'offline',
                 'error' => $e->getMessage(),
                 'last_down_at' => $server->last_down_at,
-                'current_downtime' => $server->last_down_at ? now()->diffInSeconds($server->last_down_at) : null
+                'current_downtime' => $server->last_down_at ? now()->diffInSeconds($server->last_down_at) : null,
+                'network_rx' => 0,
+                'network_tx' => 0,
+                'network_speed' => 0,
+                'disk_io_read' => 0,
+                'disk_io_write' => 0,
             ];
         }
     }
@@ -144,12 +198,19 @@ class ServerMonitoringService
             $uptimeSeconds = floatval(trim(shell_exec($uptimeCmd)));
             $systemUptime = $this->formatUptimeFromSeconds($uptimeSeconds);
 
+            // Network traffic for Windows is more complex and might require more specific commands.
+            // For now, returning 0.
             return [
                 'cpu_usage' => floatval(trim($cpu)),
                 'ram_usage' => floatval(trim($memory)),
                 'disk_usage' => floatval(trim($disk)),
                 'system_uptime' => $systemUptime,
                 'status' => 'online',
+                'network_rx' => 0,
+                'network_tx' => 0,
+                'network_speed' => 0,
+                'disk_io_read' => 0,
+                'disk_io_write' => 0,
             ];
         } catch (\Throwable $e) {
             $metrics = [
@@ -158,6 +219,11 @@ class ServerMonitoringService
                 'disk_usage' => 0,
                 'status' => 'offline',
                 'error' => $e->getMessage(),
+                'network_rx' => 0,
+                'network_tx' => 0,
+                'network_speed' => 0,
+                'disk_io_read' => 0,
+                'disk_io_write' => 0,
             ];
             
             if ($server) {
@@ -267,13 +333,49 @@ class ServerMonitoringService
             $loadAvg = trim(file_get_contents('/proc/loadavg'));
         }
 
+        // Network traffic for local Linux - dynamically find the default interface
+        $defaultInterface = trim(shell_exec("ip route | grep default | awk '{print $5}'"));
+        if (empty($defaultInterface)) {
+            $defaultInterface = 'eth0'; // Fallback
+        }
+        $netDev = file_get_contents('/proc/net/dev');
+        $lines = explode("\n", $netDev);
+        $rx = 0;
+        $tx = 0;
+        foreach ($lines as $line) {
+            if (strpos($line, $defaultInterface . ':') !== false) { 
+                $parts = preg_split('/\s+/', trim($line));
+                $rx = (int)$parts[1];
+                $tx = (int)$parts[9];
+                break;
+            }
+        }
+
+        // Disk I/O for local Linux
+        $diskStats = file_get_contents('/proc/diskstats');
+        $lines = explode("\n", $diskStats);
+        $ioRead = 0;
+        $ioWrite = 0;
+        foreach ($lines as $line) {
+            if (preg_match('/(sd|vd|nvme[0-9]n[0-9])\s/i', $line)) {
+                $parts = preg_split('/\s+/', trim($line));
+                $ioRead += (int)$parts[5] * 512;
+                $ioWrite += (int)$parts[9] * 512;
+            }
+        }
+
         $metrics = [
             'cpu_usage' => $cpuUsage,
             'ram_usage' => $memoryUsage,
             'disk_usage' => $diskUsage,
             'status' => 'online',
             'system_uptime' => $systemUptime,
-            'load_average' => $loadAvg
+            'load_average' => $loadAvg,
+            'network_rx' => $rx,
+            'network_tx' => $tx,
+            'network_speed' => 0, // Speed calculation will be handled in the main getMetrics function
+            'disk_io_read' => $ioRead,
+            'disk_io_write' => $ioWrite,
         ];
         
         return $metrics;
