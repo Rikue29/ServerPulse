@@ -70,7 +70,7 @@
     </div>
 
     <!-- Main Content -->
-    <div class="flex-1 flex flex-col min-w-0 overflow-hidden lg:ml-64">
+    <div class="flex-1 flex flex-col min-w-0 overflow-hidden">
         <!-- Top Bar -->
         <div class="flex-shrink-0">
             <header class="bg-white border-b border-gray-200">
@@ -120,12 +120,8 @@
         </div>
 
         <!-- Page Content -->
-        <main class="flex-1 overflow-x-hidden overflow-y-auto bg-gray-100 p-6">
-            @if(isset($slot))
-                {{ $slot }}
-            @else
-                @yield('content')
-            @endif
+        <main class="flex-1 overflow-x-hidden overflow-y-auto bg-gray-100">
+            @yield('content')
         </main>
     </div>
 </div>
