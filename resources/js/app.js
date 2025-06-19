@@ -94,6 +94,164 @@ channel.subscribed(() => {
         console.error('server_id is missing in processed event data!', eventData);
         return;
     }
+
+    // Check if we're on the analytics page
+    const isAnalyticsPage = window.location.pathname.includes('/analytics');
+    
+    if (isAnalyticsPage) {
+        // Update analytics page summary cards
+        updateAnalyticsPage(eventData);
+    } else {
+        // Update servers page server rows
+        updateServersPage(eventData);
+    }
+});
+
+// Global variables to track last update for throughput calculation
+let lastUpdateTime = {};
+let lastNetworkBytes = {};
+
+// Function to update analytics page summary cards
+function updateAnalyticsPage(eventData) {
+    console.log('🔄 Updating analytics page for server_id:', eventData.server_id);
+    console.log('📊 Event data received:', eventData);
+    
+    const serverId = eventData.server_id;
+    const currentTime = Date.now();
+    const currentTotalBytes = (eventData.network_rx || 0) + (eventData.network_tx || 0);
+    
+    // Calculate actual network throughput if we have previous data
+    let actualThroughput = 0;
+    if (lastUpdateTime[serverId] && lastNetworkBytes[serverId]) {
+        const timeDiff = (currentTime - lastUpdateTime[serverId]) / 1000; // seconds
+        const bytesDiff = Math.max(0, currentTotalBytes - lastNetworkBytes[serverId]);
+        actualThroughput = timeDiff > 0 ? (bytesDiff / timeDiff / 1024) : 0; // KB/s
+    }
+    
+    // Store current values for next calculation
+    lastUpdateTime[serverId] = currentTime;
+    lastNetworkBytes[serverId] = currentTotalBytes;
+    
+    // Update CPU Usage card
+    const cpuCard = document.querySelector('.bg-white.rounded-lg.shadow-sm.border.border-gray-200.p-6');
+    if (cpuCard && cpuCard.querySelector('h3').textContent.includes('CPU Usage')) {
+        const cpuValue = cpuCard.querySelector('.text-3xl.font-bold.text-gray-900');
+        if (cpuValue) {
+            const newCpuValue = parseFloat(eventData.cpu_usage || 0).toFixed(1) + '%';
+            cpuValue.textContent = newCpuValue;
+            console.log('✅ Updated CPU Usage to:', newCpuValue);
+        }
+    }
+    
+    // Update Memory Usage card
+    const memoryCards = document.querySelectorAll('.bg-white.rounded-lg.shadow-sm.border.border-gray-200.p-6');
+    memoryCards.forEach(card => {
+        const title = card.querySelector('h3');
+        if (title && title.textContent.includes('Memory Usage')) {
+            const memoryValue = card.querySelector('.text-3xl.font-bold.text-gray-900');
+            if (memoryValue) {
+                const newMemoryValue = parseFloat(eventData.ram_usage || 0).toFixed(1) + '%';
+                memoryValue.textContent = newMemoryValue;
+                console.log('✅ Updated Memory Usage to:', newMemoryValue);
+            }
+        }
+    });
+    
+    // Update Storage Usage card
+    memoryCards.forEach(card => {
+        const title = card.querySelector('h3');
+        if (title && title.textContent.includes('Storage Usage')) {
+            const storageValue = card.querySelector('.text-3xl.font-bold.text-gray-900');
+            if (storageValue) {
+                const newStorageValue = parseFloat(eventData.disk_usage || 0).toFixed(1) + '%';
+                storageValue.textContent = newStorageValue;
+                console.log('✅ Updated Storage Usage to:', newStorageValue);
+            }
+        }
+    });
+    
+    // Update Network Activity card
+    memoryCards.forEach(card => {
+        const title = card.querySelector('h3');
+        if (title && title.textContent.includes('Network Activity')) {
+            const networkValue = card.querySelector('.text-3xl.font-bold.text-gray-900');
+            const networkBar = card.querySelector('.bg-green-500.h-2.rounded-full');
+            if (networkValue) {
+                // Calculate network activity level (0-100)
+                const networkActivity = calculateNetworkActivity(eventData);
+                networkValue.textContent = networkActivity;
+                if (networkBar) {
+                    networkBar.style.width = networkActivity + '%';
+                }
+                console.log('✅ Updated Network Activity to:', networkActivity);
+            }
+        }
+    });
+    
+    // Update Response Time card
+    memoryCards.forEach(card => {
+        const title = card.querySelector('h3');
+        if (title && title.textContent.includes('Response Time')) {
+            const responseValue = card.querySelector('.text-3xl.font-bold.text-gray-900');
+            if (responseValue) {
+                const newResponseValue = parseFloat(eventData.response_time || 0).toFixed(1);
+                responseValue.textContent = newResponseValue;
+                console.log('✅ Updated Response Time to:', newResponseValue + 'ms');
+            }
+        }
+    });
+    
+    // Update Network Throughput card
+    memoryCards.forEach(card => {
+        const title = card.querySelector('h3');
+        if (title && title.textContent.includes('Network Throughput')) {
+            const throughputValue = card.querySelector('.text-3xl.font-bold.text-gray-900');
+            if (throughputValue) {
+                // Use actual calculated throughput
+                const throughputKBps = actualThroughput.toFixed(1);
+                throughputValue.textContent = throughputKBps;
+                console.log('✅ Updated Network Throughput to:', throughputKBps + ' KB/s (actual)');
+            }
+        }
+    });
+    
+    // Update System Uptime/Downtime card
+    memoryCards.forEach(card => {
+        const title = card.querySelector('h3');
+        if (title && (title.textContent.includes('System Uptime') || title.textContent.includes('System Downtime'))) {
+            const uptimeValue = card.querySelector('.text-3xl.font-bold');
+            const uptimeLabel = card.querySelector('.text-xs.text-gray-500.mt-1');
+            const icon = card.querySelector('i');
+            
+            if (eventData.status === 'online') {
+                title.textContent = 'System Uptime';
+                if (uptimeValue) {
+                    const uptimeText = humanizeSeconds(eventData.current_uptime || 0);
+                    uptimeValue.textContent = uptimeText;
+                    uptimeValue.className = 'text-3xl font-bold text-gray-900';
+                    console.log('✅ Updated System Uptime to:', uptimeText);
+                }
+                if (uptimeLabel) uptimeLabel.textContent = 'Current Uptime';
+                if (icon) icon.className = 'fas fa-server text-blue-500';
+            } else {
+                title.textContent = 'System Downtime';
+                if (uptimeValue) {
+                    const downtimeText = humanizeSeconds(eventData.current_downtime || 0);
+                    uptimeValue.textContent = downtimeText;
+                    uptimeValue.className = 'text-3xl font-bold text-red-900';
+                    console.log('✅ Updated System Downtime to:', downtimeText);
+                }
+                if (uptimeLabel) uptimeLabel.textContent = 'Current Downtime';
+                if (icon) icon.className = 'fas fa-server text-red-500';
+            }
+        }
+    });
+    
+    console.log('🎉 Analytics page updated successfully for server_id:', eventData.server_id);
+}
+
+// Function to update servers page server rows
+function updateServersPage(eventData) {
     const row = document.getElementById('server-row-' + eventData.server_id);
     if (row) {
         console.log('Found row for server_id:', eventData.server_id, row);
@@ -159,23 +317,45 @@ channel.subscribed(() => {
                 }
             }
         }
-
-        // Helper to humanize seconds (simple version)
-        function humanizeSeconds(seconds) {
-            seconds = parseInt(seconds, 10);
-            if (isNaN(seconds) || seconds < 1) return '0s';
-            const h = Math.floor(seconds / 3600);
-            const m = Math.floor((seconds % 3600) / 60);
-            const s = seconds % 60;
-            return [
-                h ? h + 'h' : '',
-                m ? m + 'm' : '',
-                s ? s + 's' : ''
-            ].filter(Boolean).join(' ');
-        }
     } else {
         console.warn('Could not find row for server_id:', eventData.server_id);
     }
-});
+}
+
+// Helper function to calculate network activity level
+function calculateNetworkActivity(eventData) {
+    // Calculate network activity based on network bytes
+    const totalBytes = (eventData.network_rx || 0) + (eventData.network_tx || 0);
+    
+    console.log('🔍 Network Activity Calculation:', {
+        network_rx: eventData.network_rx,
+        network_tx: eventData.network_tx,
+        totalBytes: totalBytes
+    });
+    
+    if (totalBytes > 1000000) { // > 1MB
+        return 100;
+    } else if (totalBytes > 100000) { // > 100KB
+        return 60;
+    } else if (totalBytes > 10000) { // > 10KB
+        return 30;
+    } else {
+        return 0;
+    }
+}
+
+// Helper to humanize seconds (simple version)
+function humanizeSeconds(seconds) {
+    seconds = parseInt(seconds, 10);
+    if (isNaN(seconds) || seconds < 1) return '0s';
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = seconds % 60;
+    return [
+        h ? h + 'h' : '',
+        m ? m + 'm' : '',
+        s ? s + 's' : ''
+    ].filter(Boolean).join(' ');
+}
 
 console.log('Event listener for ServerStatusUpdated attached.');

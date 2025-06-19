@@ -90,7 +90,7 @@ class ServerMonitoringService
                 $lines = explode("\n", $diskStats);
                 foreach ($lines as $line) {
                     // Look for common disk names like sda, vda, nvme0n1
-                    if (preg_match('/(sd|vd|nvme[0-9]n[0-9])\s/i', $line)) {
+                    if (preg_match('/(sd|vd|nvme[0-9]n[0-9]|vda|vdb|vdc|vdd|vde|vdf|vdg|vdh|vdi|vdj|vdk|vdl|vdm|vdn|vdo|vdp|vdq|vdr|vds|vdt|vdu|vdv|vdw|vdx|vdy|vdz)\s/i', $line)) {
                         $parts = preg_split('/\s+/', trim($line));
                         $ioRead += (int)$parts[5] * 512; // sectors read to bytes
                         $ioWrite += (int)$parts[9] * 512; // sectors written to bytes
@@ -142,9 +142,13 @@ class ServerMonitoringService
             $metrics['network_health'] = 'unknown';
             $metrics['ping_response'] = 0;
             $metrics['network_activity'] = 'low';
+            $metrics['response_time'] = 0;
             
-            // Simple ping test for network health
+            // Measure response time and network health
             try {
+                $responseTime = $this->measureResponseTime($server->ip_address);
+                $metrics['response_time'] = $responseTime;
+                
                 if ($this->isLocalhost($server->ip_address)) {
                     $metrics['network_health'] = 'excellent';
                     $metrics['ping_response'] = 1;
@@ -162,6 +166,7 @@ class ServerMonitoringService
             } catch (Exception $e) {
                 $metrics['network_health'] = 'unknown';
                 $metrics['ping_response'] = 0;
+                $metrics['response_time'] = 999.9;
             }
             
             // Determine network activity level based on recent transfers
@@ -390,7 +395,7 @@ class ServerMonitoringService
         $ioRead = 0;
         $ioWrite = 0;
         foreach ($lines as $line) {
-            if (preg_match('/(sd|vd|nvme[0-9]n[0-9])\s/i', $line)) {
+            if (preg_match('/(sd|vd|nvme[0-9]n[0-9]|vda|vdb|vdc|vdd|vde|vdf|vdg|vdh|vdi|vdj|vdk|vdl|vdm|vdn|vdo|vdp|vdq|vdr|vds|vdt|vdu|vdv|vdw|vdx|vdy|vdz)\s/i', $line)) {
                 $parts = preg_split('/\s+/', trim($line));
                 $ioRead += (int)$parts[5] * 512;
                 $ioWrite += (int)$parts[9] * 512;
@@ -546,5 +551,50 @@ class ServerMonitoringService
         }
 
         return implode(' ', $parts);
+    }
+
+    /**
+     * Measure response time in milliseconds using curl
+     */
+    private function measureResponseTime($ipAddress): float
+    {
+        try {
+            if ($this->isLocalhost($ipAddress)) {
+                // For localhost, return a very low response time
+                return 0.1;
+            }
+
+            // Use curl to measure response time
+            $startTime = microtime(true);
+            
+            // Try to connect to the server on port 22 (SSH) or port 80 (HTTP)
+            $ports = [22, 80, 443];
+            $responseTime = 999.9;
+            
+            foreach ($ports as $port) {
+                $curlCmd = "curl -s -o /dev/null -w '%{time_total}' --connect-timeout 1 --max-time 2 http://{$ipAddress}:{$port} 2>/dev/null";
+                $result = shell_exec($curlCmd);
+                
+                if ($result && is_numeric($result)) {
+                    $responseTime = (float)$result * 1000; // Convert to milliseconds
+                    break; // Use the first successful connection
+                }
+            }
+            
+            // If curl fails, try a simple TCP connection test
+            if ($responseTime >= 999.9) {
+                $curlCmd = "curl -s -o /dev/null -w '%{time_total}' --connect-timeout 1 --max-time 2 telnet://{$ipAddress}:22 2>/dev/null";
+                $result = shell_exec($curlCmd);
+                
+                if ($result && is_numeric($result)) {
+                    $responseTime = (float)$result * 1000; // Convert to milliseconds
+                }
+            }
+            
+            return $responseTime;
+            
+        } catch (Exception $e) {
+            return 999.9; // Error occurred
+        }
     }
 }

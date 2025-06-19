@@ -36,6 +36,7 @@ class MonitorServer extends Command
             $server->ram_usage = $metrics['ram_usage'] ?? 0;
             $server->disk_usage = $metrics['disk_usage'] ?? 0;
             $server->system_uptime = $metrics['system_uptime'] ?? null;
+            $server->response_time = $metrics['response_time'] ?? 0;
             $server->last_checked_at = now();
             $server->status = $metrics['status'] ?? 'offline';
             $server->network_rx = $metrics['network_rx'] ?? 0;
@@ -65,6 +66,7 @@ class MonitorServer extends Command
                 'network_tx' => $metrics['network_tx'] ?? 0,
                 'disk_io_read' => $metrics['disk_io_read'] ?? 0,
                 'disk_io_write' => $metrics['disk_io_write'] ?? 0,
+                'response_time' => $metrics['response_time'] ?? 0,
                 'created_at' => $currentTime,
                 'updated_at' => $currentTime,
             ]);
@@ -82,6 +84,9 @@ class MonitorServer extends Command
                 'disk_usage' => $server->disk_usage,
                 'status' => $server->status,
                 'system_uptime' => $server->system_uptime,
+                'response_time' => $server->response_time,
+                'network_rx' => $server->network_rx,
+                'network_tx' => $server->network_tx,
                 'last_down_at' => $server->last_down_at?->toDateTimeString(),
                 'current_uptime' => $server->running_since ? $server->running_since->diffInSeconds(now()) : null,
                 'current_downtime' => $server->last_down_at ? $server->last_down_at->diffInSeconds(now()) : 0,
