@@ -47,12 +47,12 @@ class LogsTable extends Component
                 });
             })
             ->when($this->selectedLevel, function ($query, $level) {
-                if ($level === 'warning') {
-                    $query->whereIn('level', ['warning', 'warn']);
-                } elseif ($level === 'error') {
+                if ($level === 'error') {
                     $query->whereIn('level', ['error', 'critical']);
+                } elseif ($level === 'warning') {
+                    $query->whereIn('level', ['warning', 'warn']);
                 } elseif ($level === 'info') {
-                    $query->whereIn('level', ['info', 'information']);
+                    $query->whereIn('level', ['info', 'information', 'notice']);
                 } else {
                     $query->where('level', $level);
                 }
@@ -60,7 +60,7 @@ class LogsTable extends Component
             ->when($this->selectedServer, function ($query, $serverId) {
                 $query->where('server_id', $serverId);
             })
-            ->orderBy('created_at', 'desc');
+            ->orderBy('id', 'desc');
 
         $logs = $query->paginate($this->perPage);
         $servers = Server::all(['id', 'name']); // Only select needed columns
@@ -85,6 +85,7 @@ class LogsTable extends Component
     public function updatingSearch() { $this->resetPage(); }
     public function updatingSelectedLevel() { $this->resetPage(); }
     public function updatingSelectedServer() { $this->resetPage(); }
+    public function updatingPerPage() { $this->resetPage(); }
 
     public function clearFilters()
     {

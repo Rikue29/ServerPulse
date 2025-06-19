@@ -1,128 +1,172 @@
-<!-- Top Navigation Bar -->
-<nav x-data="{ open: false, userDropdown: false }" class="bg-white shadow-lg border-b border-gray-200">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div class="flex justify-between h-16">
-            <!-- Left Side - Logo and Navigation -->
-            <div class="flex">
-                <!-- Logo -->
-                <div class="flex-shrink-0 flex items-center">
-                    <div class="flex items-center space-x-3">
-                        <img src="{{ asset('images/serverpulse-logo.svg') }}" alt="ServerPulse" class="h-10 w-auto">
-                    </div>
-                </div>
-
-                <!-- Navigation Links (Desktop) -->
-                <div class="hidden space-x-8 sm:-my-px sm:ml-10 sm:flex">
-                    <!-- Servers -->
-                    <a href="{{ route('servers.index') }}" 
-                       class="inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors duration-200 {{ request()->routeIs('servers.*') ? 'border-blue-500 text-gray-900' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' }}">
-                        <i class="fas fa-server mr-2"></i>
-                        Servers
-                    </a>
-
-                    <!-- Logs -->
-                    <a href="{{ route('logs.index') }}" 
-                       class="inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors duration-200 {{ request()->routeIs('logs.*') ? 'border-blue-500 text-gray-900' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' }}">
-                        <i class="fas fa-list-alt mr-2"></i>
-                        Logs
-                    </a>
-                </div>
+<!-- Dashboard Layout -->
+<div x-data="{ 
+    sidebarOpen: true, 
+    sidebarMinimized: localStorage.getItem('sidebarMinimized') === 'true',
+    toggleSidebar() {
+        this.sidebarMinimized = !this.sidebarMinimized;
+        localStorage.setItem('sidebarMinimized', this.sidebarMinimized);
+    }
+}" class="flex h-screen bg-gray-100">
+    <!-- Sidebar -->
+    <div :class="{
+            'translate-x-0 lg:w-64': (!sidebarMinimized && (sidebarOpen || window.innerWidth >= 1024)),
+            'translate-x-0 lg:w-16': sidebarMinimized,
+            '-translate-x-full': (!sidebarOpen && window.innerWidth < 1024)
+         }"
+         class="fixed inset-y-0 left-0 z-30 bg-white border-r border-gray-200 transform lg:static lg:inset-0 transition-all duration-300 ease-in-out">
+        <!-- Logo -->
+        <div class="flex items-center justify-between h-14 px-4 border-b border-gray-200">
+            <div class="flex items-center">
+                <span :class="{ 'lg:hidden': sidebarMinimized }" class="font-bold text-xl text-gray-800 transition-opacity duration-300">
+                    Server<span class="text-blue-600">PuLse</span>
+                </span>
             </div>
-
-            <!-- Right Side - User Menu -->
-            <div class="hidden sm:flex sm:items-center sm:ml-6">
-                <!-- User Dropdown -->
-                <div class="ml-3 relative" x-data="{ open: false }">
-                    <div>
-                        <button @click="open = !open" class="bg-white flex text-sm rounded-full focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all duration-200">
-                            <span class="sr-only">Open user menu</span>
-                            <div class="flex items-center space-x-3 px-3 py-2 rounded-lg hover:bg-gray-50">
-                                <div class="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                                    <span class="text-blue-600 font-medium text-sm">{{ substr(Auth::user()->name, 0, 1) }}</span>
-                                </div>
-                                <div class="hidden md:block text-left">
-                                    <div class="font-medium text-gray-900 text-sm">{{ Auth::user()->name }}</div>
-                                    <div class="text-xs text-gray-500">{{ Auth::user()->email }}</div>
-                                </div>
-                                <i class="fas fa-chevron-down text-gray-400 text-xs"></i>
-                            </div>
-                        </button>
-                    </div>
-
-                    <!-- Dropdown Menu -->
-                    <div x-show="open" x-transition:enter="transition ease-out duration-200" x-transition:enter-start="transform opacity-0 scale-95" x-transition:enter-end="transform opacity-100 scale-100" x-transition:leave="transition ease-in duration-75" x-transition:leave-start="transform opacity-100 scale-100" x-transition:leave-end="transform opacity-0 scale-95" class="origin-top-right absolute right-0 mt-2 w-48 rounded-md shadow-lg py-1 bg-white ring-1 ring-black ring-opacity-5 focus:outline-none z-50" @click.away="open = false">
-                        <a href="{{ route('profile.edit') }}" class="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
-                            <i class="fas fa-user mr-3 text-gray-400"></i>
-                            Profile Settings
-                        </a>
-                        <div class="border-t border-gray-100"></div>
-                        <form method="POST" action="{{ route('logout') }}">
-                            @csrf
-                            <button type="submit" class="w-full flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
-                                <i class="fas fa-sign-out-alt mr-3 text-gray-400"></i>
-                                Log Out
-                            </button>
-                        </form>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Mobile menu button -->
-            <div class="-mr-2 flex items-center sm:hidden">
-                <button @click="open = !open" class="bg-white inline-flex items-center justify-center p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500">
-                    <span class="sr-only">Open main menu</span>
-                    <i class="fas fa-bars" x-show="!open"></i>
-                    <i class="fas fa-times" x-show="open"></i>
-                </button>
-            </div>
+            <!-- Sidebar Toggle -->
+            <button @click="toggleSidebar()"
+                    class="hidden lg:block p-2 rounded-md text-gray-600 hover:bg-gray-100 focus:outline-none"
+                    title="Toggle Sidebar">
+                <i class="fas" :class="{ 'fa-chevron-left': !sidebarMinimized, 'fa-chevron-right': sidebarMinimized }"></i>
+            </button>
         </div>
-    </div>
 
-    <!-- Mobile Navigation Menu -->
-    <div x-show="open" class="sm:hidden">
-        <div class="pt-2 pb-3 space-y-1 border-t border-gray-200">
-            <!-- Servers -->
+        <!-- Navigation Links -->
+        <nav class="flex-1 px-2 py-2 space-y-1 overflow-y-auto">
             <a href="{{ route('servers.index') }}" 
-               class="flex items-center pl-3 pr-4 py-2 border-l-4 text-base font-medium transition-colors duration-200 {{ request()->routeIs('servers.*') ? 'bg-blue-50 border-blue-500 text-blue-700' : 'border-transparent text-gray-600 hover:text-gray-800 hover:bg-gray-50 hover:border-gray-300' }}">
-                <i class="fas fa-server mr-3"></i>
-                Servers
+               class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-colors duration-200 {{ request()->routeIs('servers.*') ? 'bg-blue-50 text-blue-700' : 'text-gray-900 hover:bg-gray-100' }}"
+               :class="{ 'justify-center': sidebarMinimized }">
+                <i class="fas fa-server text-lg w-5"></i>
+                <span :class="{ 'lg:hidden': sidebarMinimized }" class="ml-3 transition-opacity duration-300">Servers</span>
             </a>
 
-            <!-- Logs -->
             <a href="{{ route('logs.index') }}" 
-               class="flex items-center pl-3 pr-4 py-2 border-l-4 text-base font-medium transition-colors duration-200 {{ request()->routeIs('logs.*') ? 'bg-blue-50 border-blue-500 text-blue-700' : 'border-transparent text-gray-600 hover:text-gray-800 hover:bg-gray-50 hover:border-gray-300' }}">
-                <i class="fas fa-list-alt mr-3"></i>
-                Logs
+               class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-colors duration-200 {{ request()->routeIs('logs.*') ? 'bg-blue-50 text-blue-700' : 'text-gray-900 hover:bg-gray-100' }}"
+               :class="{ 'justify-center': sidebarMinimized }">
+                <i class="fas fa-list-alt text-lg w-5"></i>
+                <span :class="{ 'lg:hidden': sidebarMinimized }" class="ml-3 transition-opacity duration-300">Logs</span>
             </a>
+
+            <a href="#" 
+               class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg text-gray-900 hover:bg-gray-100 transition-colors duration-200"
+               :class="{ 'justify-center': sidebarMinimized }">
+                <i class="fas fa-bell text-lg w-5"></i>
+                <span :class="{ 'lg:hidden': sidebarMinimized }" class="ml-3 transition-opacity duration-300">Alerts</span>
+            </a>
+
+            <a href="{{ route('analytics') }}" 
+               class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-colors duration-200 {{ request()->routeIs('analytics') ? 'bg-blue-50 text-blue-700' : 'text-gray-900 hover:bg-gray-100' }}"
+               :class="{ 'justify-center': sidebarMinimized }">
+                <i class="fas fa-chart-bar text-lg w-5"></i>
+                <span :class="{ 'lg:hidden': sidebarMinimized }" class="ml-3 transition-opacity duration-300">Analytics</span>
+            </a>
+
+            <a href="#" 
+               class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg text-gray-900 hover:bg-gray-100 transition-colors duration-200"
+               :class="{ 'justify-center': sidebarMinimized }">
+                <i class="fas fa-users text-lg w-5"></i>
+                <span :class="{ 'lg:hidden': sidebarMinimized }" class="ml-3 transition-opacity duration-300">Users</span>
+            </a>
+
+            <a href="#" 
+               class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg text-gray-900 hover:bg-gray-100 transition-colors duration-200"
+               :class="{ 'justify-center': sidebarMinimized }">
+                <i class="fas fa-cog text-lg w-5"></i>
+                <span :class="{ 'lg:hidden': sidebarMinimized }" class="ml-3 transition-opacity duration-300">Settings</span>
+            </a>
+
+            <a href="#" 
+               class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg text-gray-900 hover:bg-gray-100 transition-colors duration-200"
+               :class="{ 'justify-center': sidebarMinimized }">
+                <i class="fas fa-question-circle text-lg w-5"></i>
+                <span :class="{ 'lg:hidden': sidebarMinimized }" class="ml-3 transition-opacity duration-300">Help & Support</span>
+            </a>
+        </nav>
+    </div>
+
+    <!-- Mobile Sidebar Overlay -->
+    <div x-show="sidebarOpen && window.innerWidth < 1024"
+         x-transition:enter="transition-opacity ease-linear duration-300"
+         x-transition:enter-start="opacity-0"
+         x-transition:enter-end="opacity-100"
+         x-transition:leave="transition-opacity ease-linear duration-300"
+         x-transition:leave-start="opacity-100"
+         x-transition:leave-end="opacity-0"
+         class="fixed inset-0 z-20 bg-gray-600 bg-opacity-75"
+         @click="sidebarOpen = false">
+    </div>
+
+    <!-- Main Content -->
+    <div class="flex-1 flex flex-col min-w-0">
+        <!-- Top Bar -->
+        <div class="flex-shrink-0 bg-white border-b border-gray-200">
+            <div class="flex items-center justify-between h-14 px-4">
+                <!-- Mobile Menu Button -->
+                <button @click="sidebarOpen = !sidebarOpen"
+                        class="lg:hidden p-2 rounded-md text-gray-600 hover:bg-gray-100 focus:outline-none">
+                    <i class="fas fa-bars text-xl"></i>
+                </button>
+
+                <!-- Right Side Items -->
+                <div class="flex items-center space-x-4 ml-auto">
+                    <!-- Notifications -->
+                    <button class="p-1.5 rounded-lg text-gray-600 hover:bg-gray-100 focus:outline-none relative">
+                        <i class="fas fa-bell text-xl"></i>
+                        <span class="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full"></span>
+                    </button>
+
+                    <!-- Profile Dropdown -->
+                    <div class="relative" x-data="{ open: false }">
+                        <button @click="open = !open"
+                                class="flex items-center space-x-2 p-1.5 rounded-lg hover:bg-gray-100 focus:outline-none">
+                            <div class="w-7 h-7 bg-blue-100 rounded-full flex items-center justify-center">
+                                <span class="text-blue-600 font-medium">{{ substr(Auth::user()->name, 0, 1) }}</span>
+                            </div>
+                            <i class="fas fa-chevron-down text-gray-600"></i>
+                        </button>
+
+                        <!-- Dropdown Menu -->
+                        <div x-show="open"
+                             @click.away="open = false"
+                             class="absolute right-0 mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1">
+                            <a href="#" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Profile</a>
+                            <a href="#" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Settings</a>
+                            <hr class="my-1">
+                            <form method="POST" action="{{ route('logout') }}">
+                                @csrf
+                                <button type="submit" class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                    Logout
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
 
-        <!-- Mobile User Section -->
-        <div class="pt-4 pb-3 border-t border-gray-200">
-            <div class="flex items-center px-4">
-                <div class="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                    <span class="text-blue-600 font-medium">{{ Auth::user() ? substr(Auth::user()->name, 0, 1) : 'T' }}</span>
-                </div>
-                <div class="ml-3">
-                    <div class="text-base font-medium text-gray-800">{{ Auth::user()->name ?? 'Test User' }}</div>
-                    <div class="text-sm font-medium text-gray-500">{{ Auth::user()->email ?? 'test@example.com' }}</div>
-                </div>
-            </div>
-            <div class="mt-3 space-y-1">
-                <a href="{{ route('profile.edit') }}" class="flex items-center px-4 py-2 text-base font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100">
-                    <i class="fas fa-user mr-3"></i>
-                    Profile Settings
-                </a>
-                <form method="POST" action="{{ route('logout') }}">
-                    @csrf
-                    <button type="submit" class="w-full flex items-center px-4 py-2 text-base font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100">
-                        <i class="fas fa-sign-out-alt mr-3"></i>
-                        Log Out
-                    </button>
-                </form>
-            </div>
-        </div>
+        <!-- Page Content -->
+        <main class="flex-1 overflow-x-hidden overflow-y-auto">
+            @yield('content')
+        </main>
     </div>
-</nav>
+</div>
+
+<!-- Initialize Alpine.js with window resize listener -->
+<script>
+document.addEventListener('alpine:init', () => {
+    Alpine.data('layout', () => ({
+        init() {
+            // Initialize sidebarOpen based on screen size
+            this.sidebarOpen = window.innerWidth >= 1024;
+            
+            // Handle window resize
+            window.addEventListener('resize', () => {
+                if (window.innerWidth >= 1024) {
+                    this.sidebarOpen = true;
+                }
+            });
+        }
+    }));
+});
+</script>
 
 
 

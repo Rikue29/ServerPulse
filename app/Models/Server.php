@@ -65,4 +65,19 @@ class Server extends Model
         'ssh_password',
         'ssh_key'
     ];
+
+    /**
+     * Accessor for the current downtime, formatted as a human-readable string.
+     *
+     * @return string|null
+     */
+    public function getCurrentDowntimeFormattedAttribute(): ?string
+    {
+        if ($this->status === 'offline' && $this->last_down_at) {
+            return \Carbon\CarbonInterval::seconds($this->last_down_at->diffInSeconds(now()))
+                ->cascade()
+                ->forHumans(['short' => true]);
+        }
+        return null;
+    }
 }
