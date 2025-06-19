@@ -75,6 +75,24 @@ docker-compose up -d
 docker-compose exec php npm run build
 ```
 
+**Important: Always run composer install after container rebuilds**
+```bash
+# After rebuilding containers, always run:
+docker-compose exec php composer install
+
+# If you get dependency errors, try:
+docker-compose exec php composer install --no-dev
+docker-compose exec php php artisan cache:clear
+docker-compose exec php php artisan config:clear
+docker-compose exec php php artisan view:clear
+```
+
+**Common Docker Issues:**
+- **Missing dependencies**: Run `composer install` after container rebuilds
+- **Volume mounting problems**: Check if vendor directory is properly mounted
+- **Permission issues**: Ensure proper file permissions in Docker volumes
+- **Cache conflicts**: Clear Laravel cache after dependency changes
+
 ### 4.1 Laragon Environment Issues
 
 If running in Laragon:

@@ -121,19 +121,31 @@
             <!-- System Uptime -->
             <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
                 <div class="flex items-center justify-between">
-                    <h3 class="text-sm font-medium text-gray-500">System Uptime</h3>
-                    <i class="fas fa-server text-blue-500"></i>
+                    <h3 class="text-sm font-medium text-gray-500">
+                        @if($selected_server->status === 'online')
+                            System Uptime
+                        @else
+                            System Downtime
+                        @endif
+                    </h3>
+                    <i class="fas fa-server text-{{ $selected_server->status === 'online' ? 'blue' : 'red' }}-500"></i>
                 </div>
                 <div class="mt-4">
-                    <span class="text-3xl font-bold text-gray-900">
-                        @if(!empty($chart_data['system_uptime']))
-                            {{ number_format(end($chart_data['system_uptime']), 1) }}
+                    <span class="text-3xl font-bold text-{{ $selected_server->status === 'online' ? 'gray' : 'red' }}-900">
+                        @if($selected_server->status === 'online')
+                            {{ $summary['system_uptime'] }}
                         @else
-                            0
+                            {{ $selected_server->current_downtime_formatted ?? 'N/A' }}
                         @endif
                     </span>
                 </div>
-                <p class="text-xs text-gray-500 mt-1">hours</p>
+                <p class="text-xs text-gray-500 mt-1">
+                    @if($selected_server->status === 'online')
+                        Current Uptime
+                    @else
+                        Current Downtime
+                    @endif
+                </p>
             </div>
         </div>
 
@@ -182,12 +194,8 @@
                             <span class="ml-2 text-gray-700">Network Throughput (KB/s)</span>
                         </label>
                         <label class="flex items-center">
-                            <input type="checkbox" id="responseTimeToggle" class="form-checkbox h-4 w-4 text-green-600">
+                            <input type="checkbox" id="responseTimeToggle" class="form-checkbox h-4 w-4 text-rose-600">
                             <span class="ml-2 text-gray-700">Response Time (ms)</span>
-                        </label>
-                        <label class="flex items-center">
-                            <input type="checkbox" id="systemUptimeToggle" class="form-checkbox h-4 w-4 text-blue-600">
-                            <span class="ml-2 text-gray-700">System Uptime (h)</span>
                         </label>
                     </div>
                 </div>
@@ -269,18 +277,8 @@
                         {
                             label: 'Response Time',
                             data: chartData.response_time,
-                            borderColor: 'rgba(34, 197, 94, 1)',
-                            backgroundColor: 'rgba(34, 197, 94, 0.2)',
-                            borderWidth: 2,
-                            pointRadius: 0,
-                            tension: 0.4,
-                            hidden: true
-                        },
-                        {
-                            label: 'System Uptime',
-                            data: chartData.system_uptime,
-                            borderColor: 'rgba(59, 130, 246, 1)',
-                            backgroundColor: 'rgba(59, 130, 246, 0.2)',
+                            borderColor: 'rgba(220, 38, 127, 1)',
+                            backgroundColor: 'rgba(220, 38, 127, 0.2)',
                             borderWidth: 2,
                             pointRadius: 0,
                             tension: 0.4,
@@ -337,7 +335,6 @@
             document.getElementById('diskUsageToggle').addEventListener('change', () => toggleDataset(4, performanceChart));
             document.getElementById('networkThroughputToggle').addEventListener('change', () => toggleDataset(5, performanceChart));
             document.getElementById('responseTimeToggle').addEventListener('change', () => toggleDataset(6, performanceChart));
-            document.getElementById('systemUptimeToggle').addEventListener('change', () => toggleDataset(7, performanceChart));
         });
     </script>
 @endsection

@@ -82,7 +82,7 @@
                                             </span>
                                             <div class="server-uptime-info text-xs text-gray-500 mt-1">
                                                 @if($server->status === 'online')
-                                                    Uptime: {{ $server->system_uptime ?? 'N/A' }}
+                                                    Uptime: {{ $server->running_since ? \Carbon\CarbonInterval::seconds(now()->diffInSeconds($server->running_since))->cascade()->forHumans(['short' => true]) : 'N/A' }}
                                                 @else
                                                     Downtime: {{ $server->current_downtime_formatted ?? 'N/A' }}
                                                 @endif

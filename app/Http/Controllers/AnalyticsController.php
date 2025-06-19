@@ -25,6 +25,11 @@ class AnalyticsController extends Controller
             'current_network_activity' => 0, // Will be updated below
             'storage_usage' => $selected_server->disk_usage ?? 0,
             'resource_allocation' => $selected_server->ram_usage ?? 0,
+            'system_uptime' => $selected_server->status === 'online' && $selected_server->running_since 
+                ? \Carbon\CarbonInterval::seconds(now()->diffInSeconds($selected_server->running_since))->cascade()->forHumans(['short' => true])
+                : ($selected_server->status === 'offline' && $selected_server->last_down_at 
+                    ? \Carbon\CarbonInterval::seconds(now()->diffInSeconds($selected_server->last_down_at))->cascade()->forHumans(['short' => true])
+                    : '0s'),
         ];
 
         // For the graph, we'll get the last 24 hours of performance logs for a specific server
@@ -36,7 +41,6 @@ class AnalyticsController extends Controller
             'disk_io' => [],
             'disk_usage' => [],
             'response_time' => [],
-            'system_uptime' => [],
             'network_throughput' => [],
         ];
 
@@ -57,6 +61,9 @@ class AnalyticsController extends Controller
                 $chart_data['cpu_load'][] = $log->cpu_usage ?? 0;
                 $chart_data['memory_usage'][] = $log->ram_usage ?? 0;
                 $chart_data['disk_usage'][] = $log->disk_usage ?? 0;
+                
+                // For response time, only use logs with actual response time measurements
+                $chart_data['response_time'][] = ($log->response_time && $log->response_time > 0) ? $log->response_time : 0;
                 
                 // Calculate network activity level (0-100 scale)
                 if (isset($last_log)) {
@@ -113,10 +120,6 @@ class AnalyticsController extends Controller
                     $chart_data['network_throughput'][] = 0;
                 }
                 
-                // Add response time and system uptime (these come from server data, not logs)
-                $chart_data['response_time'][] = 0; // Placeholder - would need ping data
-                $chart_data['system_uptime'][] = 0; // Placeholder - would need uptime data
-                
                 $last_log = $log;
             }
             
@@ -133,6 +136,7 @@ class AnalyticsController extends Controller
             'chart_data' => $chart_data,
             'servers' => $servers,
             'selected_server_id' => $selected_server_id,
+            'selected_server' => $selected_server,
             'network_health_summary' => $network_health_summary
         ]);
     }
