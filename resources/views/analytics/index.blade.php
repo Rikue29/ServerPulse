@@ -51,7 +51,7 @@
             <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
                 <div class="flex items-center justify-between">
                     <h3 class="text-sm font-medium text-gray-500">Storage Usage</h3>
-                    <i class="fas fa-hdd text-yellow-500"></i>
+                    <i class="fas fa-hdd text-orange-500"></i>
                 </div>
                 <div class="mt-4">
                     <span class="text-3xl font-bold text-gray-900">{{ number_format($summary['storage_usage'], 1) }}%</span>
@@ -105,7 +105,7 @@
             <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
                 <div class="flex items-center justify-between">
                     <h3 class="text-sm font-medium text-gray-500">Response Time</h3>
-                    <i class="fas fa-clock text-green-500"></i>
+                    <i class="fas fa-clock text-rose-500"></i>
                 </div>
                 <div class="mt-4">
                     <span class="text-3xl font-bold text-gray-900">
@@ -212,7 +212,8 @@
             const ctx = document.getElementById('performanceChart').getContext('2d');
             const chartData = @json($chart_data);
 
-            const performanceChart = new Chart(ctx, {
+            // Make chart globally accessible for real-time updates
+            window.performanceChart = new Chart(ctx, {
                 type: 'line',
                 data: {
                     labels: chartData.labels,
@@ -319,6 +320,46 @@
                 }
             });
 
+            // Set global chart instance for real-time updates
+            if (typeof performanceChart !== 'undefined') {
+                performanceChart = window.performanceChart;
+                console.log('📊 Chart initialized and made globally accessible for real-time updates');
+            }
+
+            // Load saved toggle states from localStorage
+            function loadToggleStates() {
+                const toggles = [
+                    { id: 'cpuToggle', datasetIndex: 0 },
+                    { id: 'memoryToggle', datasetIndex: 1 },
+                    { id: 'networkToggle', datasetIndex: 2 },
+                    { id: 'diskToggle', datasetIndex: 3 },
+                    { id: 'diskUsageToggle', datasetIndex: 4 },
+                    { id: 'networkThroughputToggle', datasetIndex: 5 },
+                    { id: 'responseTimeToggle', datasetIndex: 6 }
+                ];
+
+                toggles.forEach(toggle => {
+                    const element = document.getElementById(toggle.id);
+                    if (element) {
+                        // Load saved state or use default (checked for first 3, unchecked for others)
+                        const savedState = localStorage.getItem(`analytics_${toggle.id}`);
+                        const defaultState = toggle.datasetIndex < 3; // First 3 are checked by default
+                        const isChecked = savedState !== null ? savedState === 'true' : defaultState;
+                        
+                        element.checked = isChecked;
+                        
+                        // Apply the state to the chart
+                        if (isChecked) {
+                            window.performanceChart.show(toggle.datasetIndex);
+                        } else {
+                            window.performanceChart.hide(toggle.datasetIndex);
+                        }
+                    }
+                });
+                
+                console.log('📊 Graph toggle states restored from localStorage');
+            }
+
             function toggleDataset(id, chart) {
                 const isVisible = chart.isDatasetVisible(id);
                 if (isVisible) {
@@ -328,13 +369,50 @@
                 }
             }
 
-            document.getElementById('cpuToggle').addEventListener('change', () => toggleDataset(0, performanceChart));
-            document.getElementById('memoryToggle').addEventListener('change', () => toggleDataset(1, performanceChart));
-            document.getElementById('networkToggle').addEventListener('change', () => toggleDataset(2, performanceChart));
-            document.getElementById('diskToggle').addEventListener('change', () => toggleDataset(3, performanceChart));
-            document.getElementById('diskUsageToggle').addEventListener('change', () => toggleDataset(4, performanceChart));
-            document.getElementById('networkThroughputToggle').addEventListener('change', () => toggleDataset(5, performanceChart));
-            document.getElementById('responseTimeToggle').addEventListener('change', () => toggleDataset(6, performanceChart));
+            // Save toggle state to localStorage when changed
+            function saveToggleState(toggleId, isChecked) {
+                localStorage.setItem(`analytics_${toggleId}`, isChecked.toString());
+                console.log(`💾 Saved ${toggleId} state: ${isChecked}`);
+            }
+
+            // Load saved states when page loads
+            loadToggleStates();
+
+            // Add event listeners with localStorage saving
+            document.getElementById('cpuToggle').addEventListener('change', (e) => {
+                toggleDataset(0, window.performanceChart);
+                saveToggleState('cpuToggle', e.target.checked);
+            });
+            
+            document.getElementById('memoryToggle').addEventListener('change', (e) => {
+                toggleDataset(1, window.performanceChart);
+                saveToggleState('memoryToggle', e.target.checked);
+            });
+            
+            document.getElementById('networkToggle').addEventListener('change', (e) => {
+                toggleDataset(2, window.performanceChart);
+                saveToggleState('networkToggle', e.target.checked);
+            });
+            
+            document.getElementById('diskToggle').addEventListener('change', (e) => {
+                toggleDataset(3, window.performanceChart);
+                saveToggleState('diskToggle', e.target.checked);
+            });
+            
+            document.getElementById('diskUsageToggle').addEventListener('change', (e) => {
+                toggleDataset(4, window.performanceChart);
+                saveToggleState('diskUsageToggle', e.target.checked);
+            });
+            
+            document.getElementById('networkThroughputToggle').addEventListener('change', (e) => {
+                toggleDataset(5, window.performanceChart);
+                saveToggleState('networkThroughputToggle', e.target.checked);
+            });
+            
+            document.getElementById('responseTimeToggle').addEventListener('change', (e) => {
+                toggleDataset(6, window.performanceChart);
+                saveToggleState('responseTimeToggle', e.target.checked);
+            });
         });
     </script>
 @endsection

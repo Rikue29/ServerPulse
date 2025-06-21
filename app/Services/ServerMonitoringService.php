@@ -85,6 +85,24 @@ class ServerMonitoringService
                     }
                 }
 
+                // Handle network counter reset (server restart/offline)
+                $previousRx = $server->network_rx ?? 0;
+                $previousTx = $server->network_tx ?? 0;
+                
+                // If new values are less than previous, it means counters reset
+                if ($rx < $previousRx || $tx < $previousTx) {
+                    $rx = 0;
+                    $tx = 0;
+                }
+                
+                // Startup spike detection: if this is the first measurement after being offline
+                // and there's a huge jump in network activity, smooth it out
+                if ($server->status === 'offline' && ($rx > 0 || $tx > 0)) {
+                    // Server just came online, limit initial network activity
+                    $rx = min($rx, 1000000); // Cap at 1MB
+                    $tx = min($tx, 1000000); // Cap at 1MB
+                }
+
                 // Disk I/O
                 $diskStats = $ssh->exec('cat /proc/diskstats');
                 $lines = explode("\n", $diskStats);
@@ -96,6 +114,16 @@ class ServerMonitoringService
                         $ioWrite += (int)$parts[9] * 512; // sectors written to bytes
                         // We will sum all primary disks, but you could configure a specific one
                     }
+                }
+
+                // Handle disk I/O counter reset (server restart/offline)
+                $previousRead = $server->disk_io_read ?? 0;
+                $previousWrite = $server->disk_io_write ?? 0;
+                
+                // If new values are less than previous, it means counters reset
+                if ($ioRead < $previousRead || $ioWrite < $previousWrite) {
+                    $ioRead = 0;
+                    $ioWrite = 0;
                 }
 
                 $metrics = [
@@ -389,6 +417,26 @@ class ServerMonitoringService
             }
         }
 
+        // Handle network counter reset (server restart/offline)
+        if ($server) {
+            $previousRx = $server->network_rx ?? 0;
+            $previousTx = $server->network_tx ?? 0;
+            
+            // If new values are less than previous, it means counters reset
+            if ($rx < $previousRx || $tx < $previousTx) {
+                $rx = 0;
+                $tx = 0;
+            }
+            
+            // Startup spike detection: if this is the first measurement after being offline
+            // and there's a huge jump in network activity, smooth it out
+            if ($server->status === 'offline' && ($rx > 0 || $tx > 0)) {
+                // Server just came online, limit initial network activity
+                $rx = min($rx, 1000000); // Cap at 1MB
+                $tx = min($tx, 1000000); // Cap at 1MB
+            }
+        }
+
         // Disk I/O for local Linux
         $diskStats = file_get_contents('/proc/diskstats');
         $lines = explode("\n", $diskStats);
@@ -399,6 +447,18 @@ class ServerMonitoringService
                 $parts = preg_split('/\s+/', trim($line));
                 $ioRead += (int)$parts[5] * 512;
                 $ioWrite += (int)$parts[9] * 512;
+            }
+        }
+
+        // Handle disk I/O counter reset (server restart/offline)
+        if ($server) {
+            $previousRead = $server->disk_io_read ?? 0;
+            $previousWrite = $server->disk_io_write ?? 0;
+            
+            // If new values are less than previous, it means counters reset
+            if ($ioRead < $previousRead || $ioWrite < $previousWrite) {
+                $ioRead = 0;
+                $ioWrite = 0;
             }
         }
 

@@ -7,6 +7,7 @@ use App\Events\ServerStatusUpdated;
 use App\Models\Server;
 use App\Services\ServerMonitoringService;
 use Carbon\Carbon;
+use Carbon\CarbonInterval;
 
 class MonitorServer extends Command
 {
@@ -31,6 +32,9 @@ class MonitorServer extends Command
             $metrics = $this->monitoringService->getMetrics($server);
             $isOnline = ($metrics['status'] ?? 'offline') === 'online';
 
+            // Debug: Log the metrics being returned
+            $this->info("Server: {$server->name} - Status: {$metrics['status']} - Disk Usage: {$metrics['disk_usage']}");
+
             // 2. Update server state directly in this command
             $server->cpu_usage = $metrics['cpu_usage'] ?? 0;
             $server->ram_usage = $metrics['ram_usage'] ?? 0;
@@ -45,6 +49,18 @@ class MonitorServer extends Command
             $server->disk_io_read = $metrics['disk_io_read'] ?? 0;
             $server->disk_io_write = $metrics['disk_io_write'] ?? 0;
 
+            // Always update running_since to match Docker uptime if online
+            if ($server->status === 'online' && isset($metrics['system_uptime'])) {
+                // Parse uptime string (e.g., '55h 40m 12s') to seconds
+                $uptimeStr = $metrics['system_uptime'];
+                $uptimeSeconds = 0;
+                if (preg_match_all('/(\d+)d/', $uptimeStr, $d)) $uptimeSeconds += $d[1][0] * 86400;
+                if (preg_match_all('/(\d+)h/', $uptimeStr, $h)) $uptimeSeconds += $h[1][0] * 3600;
+                if (preg_match_all('/(\d+)m/', $uptimeStr, $m)) $uptimeSeconds += $m[1][0] * 60;
+                if (preg_match_all('/(\d+)s/', $uptimeStr, $s)) $uptimeSeconds += $s[1][0];
+                $server->running_since = now()->subSeconds($uptimeSeconds);
+            }
+
             if ($isOnline && !$wasOnline) {
                 // Server just came online
                 $server->last_down_at = null;
@@ -54,6 +70,9 @@ class MonitorServer extends Command
             }
             
             $server->save();
+
+            // Debug: Log what was saved
+            $this->info("Saved disk_usage: {$server->disk_usage} for server {$server->name}");
 
             // Create a performance log for every check with correct timezone
             $currentTime = Carbon::now('Asia/Kuala_Lumpur')->utc();
@@ -83,7 +102,9 @@ class MonitorServer extends Command
                 'ram_usage' => $server->ram_usage,
                 'disk_usage' => $server->disk_usage,
                 'status' => $server->status,
-                'system_uptime' => $server->system_uptime,
+                'system_uptime' => $server->status === 'online' && $server->running_since 
+                    ? CarbonInterval::seconds(now()->diffInSeconds($server->running_since))->cascade()->forHumans(['short' => true])
+                    : '0s',
                 'response_time' => $server->response_time,
                 'network_rx' => $server->network_rx,
                 'network_tx' => $server->network_tx,
