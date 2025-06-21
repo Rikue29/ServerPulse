@@ -44,6 +44,19 @@ docker-compose exec -d php php artisan queue:work --queue=default,broadcasting -
 # Wait a moment for the queue worker to initialize
 sleep 2
 
+# Check if queue worker started successfully
+if docker-compose exec php php artisan queue:monitor --queue=default | grep -q "running"; then
+    echo "✅ Queue worker started successfully"
+else
+    echo "⚠️  Queue worker may not be running properly"
+fi
+
+# Display initial status
+show_status
+
+# Counter for status updates
+counter=0
+
 # Main monitoring loop
 while true; do
     counter=$((counter + 1))
