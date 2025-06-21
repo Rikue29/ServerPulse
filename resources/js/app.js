@@ -118,45 +118,72 @@ function updateAnalyticsPage(eventData) {
         console.log(`⏭️ Skipping update - broadcast for server ${eventData.server_id}, but selected server is ${selectedServerId}`);
         return;
     }
+
+    // Check if we're on the analytics page
+    const isAnalyticsPage = window.location.pathname.includes('/analytics');
+    
+    if (isAnalyticsPage) {
+        // Update analytics page summary cards
+        updateAnalyticsPage(eventData);
+    } else {
+        // Update servers page server rows
+        updateServersPage(eventData);
+    }
+});
+
+// Global variables for real-time updates
+let lastUpdateTime = {};
+let lastNetworkBytes = {};
+let performanceChart = null; // Global chart instance
+let networkThroughputHistory = {}; // Store network throughput history for each server
+let lastDiskIORead = {};
+let lastDiskIOWrite = {};
+
+// Function to update analytics page summary cards
+function updateAnalyticsPage(eventData) {
+    console.log('🔄 Updating analytics page for server_id:', eventData.server_id);
+    console.log('📊 Event data received:', eventData);
+    
+    // Check if this update is for the currently selected server
+    const serverSelector = document.getElementById('server_id');
+    if (!serverSelector) {
+        console.log('⚠️ Server selector not found, skipping update');
+        return;
+    }
+    
+    const selectedServerId = parseInt(serverSelector.value);
+    if (eventData.server_id !== selectedServerId) {
+        console.log(`⏭️ Skipping update - broadcast for server ${eventData.server_id}, but selected server is ${selectedServerId}`);
+        return;
+    }
     
     console.log(`✅ Updating cards for selected server ${selectedServerId}`);
     
     const serverId = eventData.server_id;
-    const currentTime = new Date().toLocaleTimeString('en-GB', { 
-        hour12: false, 
-        hour: '2-digit', 
-        minute: '2-digit', 
-        second: '2-digit' 
-    });
+    const currentTime = Date.now();
     const currentTotalBytes = (eventData.network_rx || 0) + (eventData.network_tx || 0);
     
     // Calculate actual network throughput if we have previous data
     let actualThroughput = 0;
     if (lastUpdateTime[serverId] && lastNetworkBytes[serverId]) {
-        const timeDiff = (currentTime - lastUpdateTime[serverId]) / 1000;
+        const timeDiff = (currentTime - lastUpdateTime[serverId]) / 1000; // seconds
         const bytesDiff = Math.max(0, currentTotalBytes - lastNetworkBytes[serverId]);
-        actualThroughput = timeDiff > 0 ? (bytesDiff / timeDiff / 1024) : 0;
+        actualThroughput = timeDiff > 0 ? (bytesDiff / timeDiff / 1024) : 0; // KB/s
     }
     
     // Store current values for next calculation
     lastUpdateTime[serverId] = currentTime;
     lastNetworkBytes[serverId] = currentTotalBytes;
     
-    console.log('🔄 Updating summary cards...');
     // Update summary cards
     updateSummaryCards(eventData, actualThroughput);
     
-    console.log('🔄 Updating performance chart...');
     // Update performance chart
     updatePerformanceChart(eventData, actualThroughput);
-    
-    console.log('✅ Analytics page update completed');
 }
 
 // Function to update servers page server rows
 function updateServersPage(eventData) {
-    console.log('🔄 updateServersPage called with data:', eventData);
-    
     const row = document.getElementById('server-row-' + eventData.server_id);
     if (row) {
         console.log('✅ Found row for server_id:', eventData.server_id);
@@ -228,309 +255,284 @@ function updateServersPage(eventData) {
                 }
             }
         }
-        
-        // Update Response Time
-        const responseTimeCell = row.querySelector('[data-col="response_time"]');
-        if (responseTimeCell) {
-            const responseTimeText = responseTimeCell.querySelector('span');
-            if (responseTimeText) {
-                responseTimeText.textContent = parseFloat(eventData.response_time || 0).toFixed(1) + 'ms';
-                console.log('✅ Updated Response Time to:', eventData.response_time);
-            }
-        }
-        
-        // Update Uptime
-        const uptimeCell = row.querySelector('[data-col="uptime"]');
-        if (uptimeCell) {
-            const uptimeText = uptimeCell.querySelector('span');
-            if (uptimeText) {
-                if (eventData.status === 'online' && eventData.current_uptime !== null) {
-                    // Server is online - show current uptime
-                    const uptimeSeconds = eventData.current_uptime;
-                    const formattedUptime = formatUptime(uptimeSeconds);
-                    uptimeText.textContent = formattedUptime;
-                    console.log('✅ Updated Uptime to:', formattedUptime, '(from current_uptime:', uptimeSeconds, 'seconds)');
-                } else if (eventData.status === 'offline' && eventData.current_downtime !== null) {
-                    // Server is offline - show current downtime
-                    const downtimeSeconds = eventData.current_downtime;
-                    const formattedDowntime = formatUptime(downtimeSeconds);
-                    uptimeText.textContent = formattedDowntime;
-                    console.log('✅ Updated Downtime to:', formattedDowntime, '(from current_downtime:', downtimeSeconds, 'seconds)');
-                } else {
-                    // Fallback to system_uptime if available
-                    uptimeText.textContent = eventData.system_uptime || 'N/A';
-                    console.log('✅ Updated Uptime/Downtime to:', eventData.system_uptime || 'N/A', '(fallback)');
-                }
-            }
-        }
     } else {
-        console.warn('❌ Could not find row for server_id:', eventData.server_id);
+        console.warn('Could not find row for server_id:', eventData.server_id);
     }
 }
 
-// Function to calculate network activity level
+// Helper function to calculate network activity level
 function calculateNetworkActivity(eventData) {
-    const rx = eventData.network_rx || 0;
-    const tx = eventData.network_tx || 0;
-    const total = rx + tx;
+    // Calculate network activity based on network bytes
+    const totalBytes = (eventData.network_rx || 0) + (eventData.network_tx || 0);
     
-    if (total > 1000000) {
-        return 100; // high
-    } else if (total > 100000) {
-        return 50; // medium
+    console.log('🔍 Network Activity Calculation:', {
+        network_rx: eventData.network_rx,
+        network_tx: eventData.network_tx,
+        totalBytes: totalBytes
+    });
+    
+    if (totalBytes > 1000000) { // > 1MB
+        return 100;
+    } else if (totalBytes > 100000) { // > 100KB
+        return 60;
+    } else if (totalBytes > 10000) { // > 10KB
+        return 30;
     } else {
-        return 10; // low
+        return 0;
     }
 }
 
-// Function to get network activity text
-function getNetworkActivityText(eventData) {
-    const rx = eventData.network_rx || 0;
-    const tx = eventData.network_tx || 0;
-    const total = rx + tx;
-    
-    if (total > 1000000) {
-        return 'high';
-    } else if (total > 100000) {
-        return 'medium';
-    } else {
-        return 'low';
-    }
+// Helper to humanize seconds (simple version)
+function humanizeSeconds(seconds) {
+    seconds = parseInt(seconds, 10);
+    if (isNaN(seconds) || seconds < 1) return '0s';
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = seconds % 60;
+    return [
+        h ? h + 'h' : '',
+        m ? m + 'm' : '',
+        s ? s + 's' : ''
+    ].filter(Boolean).join(' ');
 }
 
-// Function to format uptime
-function formatUptime(seconds) {
-    if (!seconds || seconds < 0) return '0s';
-    
-    function humanizeSeconds(seconds) {
-        const days = Math.floor(seconds / 86400);
-        const hours = Math.floor((seconds % 86400) / 3600);
-        const minutes = Math.floor((seconds % 3600) / 60);
-        const secs = Math.floor(seconds % 60);
-        
-        const parts = [];
-        if (days > 0) parts.push(days + 'd');
-        if (hours > 0) parts.push(hours + 'h');
-        if (minutes > 0) parts.push(minutes + 'm');
-        if (secs > 0) parts.push(secs + 's');
-        
-        return parts.length > 0 ? parts.join(' ') : '0s';
-    }
-    
-    return humanizeSeconds(seconds);
-}
+console.log('Event listener for ServerStatusUpdated attached.');
 
-// Function to handle server selection change
+// Function to handle server selection change on analytics page
 function handleServerSelectionChange() {
     const serverSelector = document.getElementById('server_id');
-    if (serverSelector) {
-        const selectedServerId = parseInt(serverSelector.value);
-        console.log('🔄 Server selection changed to:', selectedServerId);
-        
-        // Clear previous data
-        lastUpdateTime = {};
-        lastNetworkBytes = {};
-        networkThroughputHistory = {};
-        lastDiskIORead = {};
-        lastDiskIOWrite = {};
-        
-        // Reset chart data if available
-        if (window.performanceChart) {
-            const datasets = window.performanceChart.data.datasets;
-            datasets.forEach(dataset => {
-                dataset.data = [];
-            });
-            window.performanceChart.update('none');
-            console.log('🔄 Chart data cleared for new server');
+    if (!serverSelector) return;
+    
+    const selectedServerId = parseInt(serverSelector.value);
+    console.log(`🔄 Server selection changed to: ${selectedServerId}`);
+    
+    // Clear previous data for the new server
+    delete lastUpdateTime[selectedServerId];
+    delete lastNetworkBytes[selectedServerId];
+    delete networkThroughputHistory[selectedServerId];
+    
+    // Reset network throughput display
+    const throughputCard = document.getElementById('network-throughput-card');
+    if (throughputCard) {
+        const throughputValue = throughputCard.querySelector('.text-2xl');
+        if (throughputValue) {
+            throughputValue.textContent = '0 KB/s';
         }
     }
+    
+    console.log(`🧹 Cleared previous data for server ${selectedServerId}`);
 }
 
-// Function to update performance chart
+// Add event listener for server selection change on analytics page
+document.addEventListener('DOMContentLoaded', function() {
+    const serverSelector = document.getElementById('server_id');
+    if (serverSelector) {
+        serverSelector.addEventListener('change', handleServerSelectionChange);
+        console.log('🎯 Server selection change listener attached');
+    }
+});
+
+// Function to update performance chart with real-time data
 function updatePerformanceChart(eventData, actualThroughput) {
     if (!window.performanceChart) {
         console.log('⚠️ Chart not initialized yet');
         return;
     }
     
+    console.log('📈 Fetching fresh chart data for real-time update');
+    
+    // Fetch fresh chart data from the database to ensure consistency
     const serverId = eventData.server_id;
-    const currentTime = new Date().toLocaleTimeString('en-GB', { 
-        hour12: false, 
-        hour: '2-digit', 
-        minute: '2-digit', 
-        second: '2-digit' 
-    });
+    const url = `/analytics?server_id=${serverId}&ajax=1`;
     
-    // Initialize history for this server if not exists
-    if (!networkThroughputHistory[serverId]) {
-        networkThroughputHistory[serverId] = [];
-    }
-    
-    // Add throughput to history
-    networkThroughputHistory[serverId].push(actualThroughput);
-    
-    // Keep only last 50 points
-    if (networkThroughputHistory[serverId].length > 50) {
-        networkThroughputHistory[serverId].shift();
-    }
-    
-    // Calculate disk I/O throughput
-    let diskIOThroughput = 0;
-    const currentDiskIORead = eventData.disk_io_read || 0;
-    const currentDiskIOWrite = eventData.disk_io_write || 0;
-    
-    if (lastDiskIORead[serverId] !== undefined && lastDiskIOWrite[serverId] !== undefined) {
-        const timeDiff = (Date.now() - lastUpdateTime[serverId]) / 1000;
-        const readDiff = Math.max(0, currentDiskIORead - lastDiskIORead[serverId]);
-        const writeDiff = Math.max(0, currentDiskIOWrite - lastDiskIOWrite[serverId]);
-        const totalDiff = readDiff + writeDiff;
-        diskIOThroughput = timeDiff > 0 ? (totalDiff / timeDiff / 1024 / 1024) : 0; // MB/s
-    }
-    
-    lastDiskIORead[serverId] = currentDiskIORead;
-    lastDiskIOWrite[serverId] = currentDiskIOWrite;
-    
-    // Update chart data
-    const chart = window.performanceChart;
-    const labels = chart.data.labels;
-    const datasets = chart.data.datasets;
-    
-    // Add new time label
-    labels.push(currentTime);
-    if (labels.length > 50) {
-        labels.shift();
-    }
-    
-    // Update datasets
-    if (datasets[0]) datasets[0].data.push(eventData.cpu_usage || 0); // CPU
-    if (datasets[1]) datasets[1].data.push(eventData.ram_usage || 0); // Memory
-    if (datasets[2]) datasets[2].data.push(calculateNetworkActivity(eventData)); // Network Activity
-    if (datasets[3]) datasets[3].data.push(diskIOThroughput); // Disk I/O
-    if (datasets[4]) datasets[4].data.push(eventData.disk_usage || 0); // Disk Usage
-    if (datasets[5]) datasets[5].data.push(actualThroughput); // Network Throughput
-    if (datasets[6]) datasets[6].data.push(eventData.response_time || 0); // Response Time
-    
-    // Remove old data points
-    datasets.forEach(dataset => {
-        if (dataset.data.length > 50) {
-            dataset.data.shift();
-        }
-    });
-    
-    // Update chart
-    chart.update('none');
-    console.log('✅ Chart updated with new data');
+    fetch(url)
+        .then(response => response.json())
+        .then(data => {
+            if (data.chart_data) {
+                // Update chart with fresh data from database
+                window.performanceChart.data.labels = data.chart_data.labels;
+                window.performanceChart.data.datasets[0].data = data.chart_data.cpu_load;
+                window.performanceChart.data.datasets[1].data = data.chart_data.memory_usage;
+                window.performanceChart.data.datasets[2].data = data.chart_data.network_activity;
+                window.performanceChart.data.datasets[3].data = data.chart_data.disk_io;
+                window.performanceChart.data.datasets[4].data = data.chart_data.disk_usage;
+                window.performanceChart.data.datasets[6].data = data.chart_data.response_time;
+
+                // Use the actualThroughput passed from updateAnalyticsPage (same as metrics card)
+                console.log('📊 Using actualThroughput from metrics card:', actualThroughput);
+                
+                // Initialize history for this server if it doesn't exist
+                if (!networkThroughputHistory[serverId]) {
+                    networkThroughputHistory[serverId] = [];
+                }
+                
+                // Add the new throughput value to history
+                networkThroughputHistory[serverId].push(actualThroughput);
+                
+                console.log('📊 Network Throughput History:', {
+                    serverId: serverId,
+                    historyLength: networkThroughputHistory[serverId].length,
+                    latestValue: actualThroughput,
+                    last5Values: networkThroughputHistory[serverId].slice(-5)
+                });
+                
+                // Keep only the last 200 values to match the chart length
+                if (networkThroughputHistory[serverId].length > 200) {
+                    networkThroughputHistory[serverId] = networkThroughputHistory[serverId].slice(-200);
+                }
+                
+                // Fill the network throughput dataset with the history
+                // If we don't have enough history, pad with zeros
+                const historyLength = networkThroughputHistory[serverId].length;
+                const chartLength = window.performanceChart.data.labels.length;
+                
+                let throughputData = [];
+                if (historyLength >= chartLength) {
+                    // Use the last chartLength values from history
+                    throughputData = networkThroughputHistory[serverId].slice(-chartLength);
+                } else {
+                    // Pad with zeros at the beginning, then add history
+                    const padding = new Array(chartLength - historyLength).fill(0);
+                    throughputData = [...padding, ...networkThroughputHistory[serverId]];
+                }
+                
+                console.log('📈 Chart Data Debug:', {
+                    historyLength: historyLength,
+                    chartLength: chartLength,
+                    throughputDataLength: throughputData.length,
+                    throughputDataLast5: throughputData.slice(-5)
+                });
+                
+                window.performanceChart.data.datasets[5].data = throughputData;
+
+                // Update the chart
+                window.performanceChart.update('none');
+
+                console.log('✅ Chart updated with real-time network throughput history. Latest:', actualThroughput.toFixed(2) + ' KB/s');
+            }
+        })
+        .catch(error => {
+            console.error('❌ Error fetching fresh chart data:', error);
+        });
 }
 
 // Function to update summary cards
 function updateSummaryCards(eventData, actualThroughput) {
-    console.log('🔄 Updating summary cards with data:', eventData);
-    
     // Update CPU Usage card
-    const cpuCard = document.querySelector('.bg-white.rounded-lg.shadow-sm.border.border-gray-200.p-6:nth-child(1) .text-3xl');
-    if (cpuCard) {
-        cpuCard.textContent = parseFloat(eventData.cpu_usage || 0).toFixed(1) + '%';
-        console.log('✅ Updated CPU card to:', eventData.cpu_usage);
-    }
-    
-    // Update Network Activity card
-    const networkActivityCard = document.querySelector('.bg-white.rounded-lg.shadow-sm.border.border-gray-200.p-6:nth-child(2) .text-3xl');
-    if (networkActivityCard) {
-        // Calculate network activity as a numeric value (0-100 scale or throughput)
-        // Use the same logic as the graph for consistency
-        const activityValue = calculateNetworkActivity(eventData);
-        // Optionally, format as percentage or throughput (Kbps/Mbps)
-        networkActivityCard.textContent = activityValue + '%';
-        
-        // Update progress bar
-        const progressBar = networkActivityCard.closest('.bg-white').querySelector('.bg-green-500');
-        if (progressBar) {
-            progressBar.style.width = activityValue + '%';
+    const cpuCard = document.querySelector('.bg-white.rounded-lg.shadow-sm.border.border-gray-200.p-6');
+    if (cpuCard && cpuCard.querySelector('h3').textContent.includes('CPU Usage')) {
+        const cpuValue = cpuCard.querySelector('.text-3xl.font-bold.text-gray-900');
+        if (cpuValue) {
+            const newCpuValue = parseFloat(eventData.cpu_usage || 0).toFixed(1) + '%';
+            cpuValue.textContent = newCpuValue;
+            console.log('✅ Updated CPU Usage to:', newCpuValue);
         }
-        console.log('✅ Updated Network Activity card to:', activityValue);
-    }
-    
-    // Update Storage Usage card
-    const storageCard = document.querySelector('.bg-white.rounded-lg.shadow-sm.border.border-gray-200.p-6:nth-child(3) .text-3xl');
-    if (storageCard) {
-        storageCard.textContent = parseFloat(eventData.disk_usage || 0).toFixed(1) + '%';
-        console.log('✅ Updated Storage card to:', eventData.disk_usage);
     }
     
     // Update Memory Usage card
-    const memoryCard = document.querySelector('.bg-white.rounded-lg.shadow-sm.border.border-gray-200.p-6:nth-child(4) .text-3xl');
-    if (memoryCard) {
-        memoryCard.textContent = parseFloat(eventData.ram_usage || 0).toFixed(1) + '%';
-        console.log('✅ Updated Memory card to:', eventData.ram_usage);
-    }
-    
-    // Update additional metrics cards
-    const additionalCards = document.querySelectorAll('.grid.grid-cols-1.md\\:grid-cols-2.lg\\:grid-cols-4.gap-6.mb-6:nth-child(2) .bg-white.rounded-lg.shadow-sm.border.border-gray-200.p-6');
-    
-    // Disk Usage card
-    if (additionalCards[0]) {
-        const diskUsageText = additionalCards[0].querySelector('.text-3xl');
-        if (diskUsageText) {
-            diskUsageText.textContent = parseFloat(eventData.disk_usage || 0).toFixed(1) + '%';
-            console.log('✅ Updated additional Disk Usage card to:', eventData.disk_usage);
-        }
-    }
-    
-    // Network Throughput card
-    if (additionalCards[1]) {
-        const throughputText = additionalCards[1].querySelector('.text-3xl');
-        if (throughputText) {
-            throughputText.textContent = parseFloat(actualThroughput).toFixed(1);
-            console.log('✅ Updated Network Throughput card to:', actualThroughput);
-        }
-    }
-    
-    // Response Time card
-    if (additionalCards[2]) {
-        const responseTimeText = additionalCards[2].querySelector('.text-3xl');
-        if (responseTimeText) {
-            responseTimeText.textContent = parseFloat(eventData.response_time || 0).toFixed(1);
-            console.log('✅ Updated Response Time card to:', eventData.response_time);
-        }
-    }
-    
-    // System Uptime card
-    if (additionalCards[3]) {
-        const uptimeText = additionalCards[3].querySelector('.text-3xl');
-        if (uptimeText) {
-            if (eventData.status === 'online' && eventData.current_uptime !== null) {
-                // Server is online - show current uptime
-                const uptimeSeconds = eventData.current_uptime;
-                const formattedUptime = formatUptime(uptimeSeconds);
-                uptimeText.textContent = formattedUptime;
-                console.log('✅ Updated Analytics Uptime to:', formattedUptime, '(from current_uptime:', uptimeSeconds, 'seconds)');
-            } else if (eventData.status === 'offline' && eventData.current_downtime !== null) {
-                // Server is offline - show current downtime
-                const downtimeSeconds = eventData.current_downtime;
-                const formattedDowntime = formatUptime(downtimeSeconds);
-                uptimeText.textContent = formattedDowntime;
-                console.log('✅ Updated Analytics Downtime to:', formattedDowntime, '(from current_downtime:', downtimeSeconds, 'seconds)');
-            } else {
-                // Fallback to system_uptime if available
-                uptimeText.textContent = eventData.system_uptime || 'N/A';
-                console.log('✅ Updated Analytics Uptime/Downtime to:', eventData.system_uptime || 'N/A', '(fallback)');
+    const memoryCards = document.querySelectorAll('.bg-white.rounded-lg.shadow-sm.border.border-gray-200.p-6');
+    memoryCards.forEach(card => {
+        const title = card.querySelector('h3');
+        if (title && title.textContent.includes('Memory Usage')) {
+            const memoryValue = card.querySelector('.text-3xl.font-bold.text-gray-900');
+            if (memoryValue) {
+                const newMemoryValue = parseFloat(eventData.ram_usage || 0).toFixed(1) + '%';
+                memoryValue.textContent = newMemoryValue;
+                console.log('✅ Updated Memory Usage to:', newMemoryValue);
             }
         }
-    }
+    });
     
-    console.log('✅ All summary cards updated successfully');
+    // Update Storage Usage card
+    memoryCards.forEach(card => {
+        const title = card.querySelector('h3');
+        if (title && (title.textContent.includes('Storage Usage') || title.textContent.includes('Disk Usage'))) {
+            const storageValue = card.querySelector('.text-3xl.font-bold.text-gray-900');
+            if (storageValue) {
+                const newStorageValue = parseFloat(eventData.disk_usage || 0).toFixed(1) + '%';
+                storageValue.textContent = newStorageValue;
+                console.log('✅ Updated Disk Usage to:', newStorageValue);
+            }
+        }
+    });
+    
+    // Update Network Activity card
+    memoryCards.forEach(card => {
+        const title = card.querySelector('h3');
+        if (title && title.textContent.includes('Network Activity')) {
+            const networkValue = card.querySelector('.text-3xl.font-bold.text-gray-900');
+            const networkBar = card.querySelector('.bg-green-500.h-2.rounded-full');
+            if (networkValue) {
+                // Calculate network activity level (0-100)
+                const networkActivity = calculateNetworkActivity(eventData);
+                networkValue.textContent = networkActivity;
+                if (networkBar) {
+                    networkBar.style.width = networkActivity + '%';
+                }
+                console.log('✅ Updated Network Activity to:', networkActivity);
+            }
+        }
+    });
+    
+    // Update Response Time card
+    memoryCards.forEach(card => {
+        const title = card.querySelector('h3');
+        if (title && title.textContent.includes('Response Time')) {
+            const responseValue = card.querySelector('.text-3xl.font-bold.text-gray-900');
+            if (responseValue) {
+                const newResponseValue = parseFloat(eventData.response_time || 0).toFixed(1);
+                responseValue.textContent = newResponseValue;
+                console.log('✅ Updated Response Time to:', newResponseValue + 'ms');
+            }
+        }
+    });
+    
+    // Update Network Throughput card
+    memoryCards.forEach(card => {
+        const title = card.querySelector('h3');
+        if (title && title.textContent.includes('Network Throughput')) {
+            const throughputValue = card.querySelector('.text-3xl.font-bold.text-gray-900');
+            if (throughputValue) {
+                // Use actual calculated throughput
+                const throughputKBps = actualThroughput.toFixed(1);
+                throughputValue.textContent = throughputKBps;
+                console.log('✅ Updated Network Throughput to:', throughputKBps + ' KB/s (actual)');
+            }
+        }
+    });
+    
+    // Update System Uptime/Downtime card
+    memoryCards.forEach(card => {
+        const title = card.querySelector('h3');
+        if (title && (title.textContent.includes('System Uptime') || title.textContent.includes('System Downtime'))) {
+            const uptimeValue = card.querySelector('.text-3xl.font-bold');
+            const uptimeLabel = card.querySelector('.text-xs.text-gray-500.mt-1');
+            const icon = card.querySelector('i');
+            
+            if (eventData.status === 'online') {
+                title.textContent = 'System Uptime';
+                if (uptimeValue) {
+                    // Use system_uptime instead of current_uptime to match initial page load
+                    const uptimeText = eventData.system_uptime || '0s';
+                    uptimeValue.textContent = uptimeText;
+                    uptimeValue.className = 'text-3xl font-bold text-gray-900';
+                    console.log('✅ Updated System Uptime to:', uptimeText);
+                }
+                if (uptimeLabel) uptimeLabel.textContent = 'Current Uptime';
+                if (icon) icon.className = 'fas fa-server text-blue-500';
+            } else {
+                title.textContent = 'System Downtime';
+                if (uptimeValue) {
+                    const downtimeText = humanizeSeconds(eventData.current_downtime || 0);
+                    uptimeValue.textContent = downtimeText;
+                    uptimeValue.className = 'text-3xl font-bold text-red-900';
+                    console.log('✅ Updated System Downtime to:', downtimeText);
+                }
+                if (uptimeLabel) uptimeLabel.textContent = 'Current Downtime';
+                if (icon) icon.className = 'fas fa-server text-red-500';
+            }
+        }
+    });
+    
+    console.log('🎉 Summary cards updated successfully for server_id:', eventData.server_id);
 }
-
-// Add event listener for server selection change
-document.addEventListener('DOMContentLoaded', function() {
-    console.log('🔧 Debug: DOM loaded, setting up event listeners');
-    const serverSelector = document.getElementById('server_id');
-    if (serverSelector) {
-        serverSelector.addEventListener('change', handleServerSelectionChange);
-        console.log('✅ Server selection change listener attached');
-    } else {
-        console.log('⚠️ Server selector not found on this page');
-    }
-});
-
-console.log('🎉 Real-time update system initialized!');

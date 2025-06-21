@@ -1,0 +1,20 @@
+[Unit]
+Description=ServerPulse Monitoring Agent
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=serverpulse
+Group=serverpulse
+WorkingDirectory=/opt/serverpulse-agent
+Environment=PATH=/opt/serverpulse-agent/venv/bin
+ExecStart=/opt/serverpulse-agent/venv/bin/python /opt/serverpulse-agent/serverpulse_agent.py /etc/serverpulse-agent/config.yml
+Restart=always
+RestartSec=10
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=serverpulse-agent
+
+[Install]
+WantedBy=multi-user.target

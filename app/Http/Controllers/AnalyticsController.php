@@ -15,16 +15,26 @@ class AnalyticsController extends Controller
         $selected_server_id = $request->input('server_id', $servers->first()->id ?? null);
         $selected_server = Server::find($selected_server_id);
 
+        // Get fresh metrics from monitoring service for initial load
+        $fresh_metrics = [];
+        if ($selected_server) {
+            $monitoringService = new \App\Services\ServerMonitoringService();
+            $fresh_metrics = $monitoringService->getMetrics($selected_server);
+        }
+
         // Calculate network health summary
         $network_health_summary = $this->calculateNetworkHealthSummary($selected_server);
 
         $summary = [
-            'system_performance' => $selected_server->cpu_usage ?? 0,
+            'system_performance' => $fresh_metrics['cpu_usage'] ?? $selected_server->cpu_usage ?? 0,
             'network_health' => $network_health_summary['health_score'],
             'network_activity' => $network_health_summary['activity_level'],
             'current_network_activity' => 0, // Will be updated below
-            'storage_usage' => $selected_server->disk_usage ?? 0,
-            'resource_allocation' => $selected_server->ram_usage ?? 0,
+            'storage_usage' => $fresh_metrics['disk_usage'] ?? $selected_server->disk_usage ?? 0,
+            'resource_allocation' => $fresh_metrics['ram_usage'] ?? $selected_server->ram_usage ?? 0,
+            'system_uptime' => $selected_server->status === 'online' && $selected_server->running_since 
+                ? \Carbon\CarbonInterval::seconds(now()->diffInSeconds($selected_server->running_since))->cascade()->forHumans(['short' => true])
+                : '0s',
         ];
 
         // For the graph, we'll get the last 24 hours of performance logs for a specific server
@@ -36,7 +46,6 @@ class AnalyticsController extends Controller
             'disk_io' => [],
             'disk_usage' => [],
             'response_time' => [],
-            'system_uptime' => [],
             'network_throughput' => [],
         ];
 
@@ -44,7 +53,7 @@ class AnalyticsController extends Controller
             // Get the most recent performance logs by ID to ensure we get the latest data
             $performanceLogs = PerformanceLog::where('server_id', $selected_server_id)
                        ->orderBy('id', 'desc')
-                       ->limit(100) // Limit to most recent 100 logs
+                       ->limit(200) // Increased from 100 to 200 for better network throughput calculation
                        ->get()
                        ->reverse(); // Reverse to get chronological order for the graph
 
@@ -57,6 +66,9 @@ class AnalyticsController extends Controller
                 $chart_data['cpu_load'][] = $log->cpu_usage ?? 0;
                 $chart_data['memory_usage'][] = $log->ram_usage ?? 0;
                 $chart_data['disk_usage'][] = $log->disk_usage ?? 0;
+                
+                // For response time, only use logs with actual response time measurements
+                $chart_data['response_time'][] = ($log->response_time && $log->response_time > 0) ? $log->response_time : 0;
                 
                 // Calculate network activity level (0-100 scale)
                 if (isset($last_log)) {
@@ -82,15 +94,51 @@ class AnalyticsController extends Controller
                         }
                         $chart_data['network_activity'][] = $activity_level;
                         
+                        // Calculate network throughput (bytes per second)
+                        // Handle network counter reset (if total_transfer is 0 but we have current values, it might be a reset)
+                        if ($total_transfer == 0 && (($log->network_rx ?? 0) > 0 || ($log->network_tx ?? 0) > 0)) {
+                            $network_throughput = 0;
+                        } else {
+                            $network_throughput = $total_transfer / $time_diff;
+                        }
+                        
+                        // Ensure minimum time difference to avoid division by zero or very small values
+                        if ($time_diff < 1) {
+                            $time_diff = 1; // Minimum 1 second
+                            $network_throughput = $total_transfer / $time_diff;
+                        }
+                        
+                        // Spike detection and smoothing for network throughput
+                        // If throughput is more than 10x the average of previous values, cap it
+                        if (!empty($chart_data['network_throughput'])) {
+                            $recent_values = array_slice($chart_data['network_throughput'], -5); // Last 5 values
+                            $average_throughput = array_sum($recent_values) / count($recent_values);
+                            
+                            // If current throughput is more than 10x the average, it's likely a spike
+                            if ($average_throughput > 0 && $network_throughput > ($average_throughput * 10)) {
+                                $network_throughput = $average_throughput * 2; // Cap at 2x average
+                            }
+                            
+                            // Additional safety cap: if throughput > 1000 KB/s (1 MB/s), cap it
+                            if ($network_throughput > 1000) {
+                                $network_throughput = 1000;
+                            }
+                        }
+                        
+                        $chart_data['network_throughput'][] = round($network_throughput / 1024, 2); // KB/s
+                        
                         // Calculate disk I/O speed in MB/s
                         $read_diff = ($log->disk_io_read ?? 0) - ($last_log->disk_io_read ?? 0);
                         $write_diff = ($log->disk_io_write ?? 0) - ($last_log->disk_io_write ?? 0);
-                        $disk_io_speed = ($read_diff + $write_diff) / $time_diff / 1024 / 1024; // MB/s
-                        $chart_data['disk_io'][] = round($disk_io_speed, 2);
                         
-                        // Calculate network throughput (bytes per second)
-                        $network_throughput = $total_transfer / $time_diff;
-                        $chart_data['network_throughput'][] = round($network_throughput / 1024, 2); // KB/s
+                        // Handle disk I/O counter reset (negative values indicate reset)
+                        if ($read_diff < 0 || $write_diff < 0) {
+                            $disk_io_speed = 0;
+                        } else {
+                            $disk_io_speed = ($read_diff + $write_diff) / $time_diff / 1024 / 1024; // MB/s
+                        }
+                        
+                        $chart_data['disk_io'][] = round($disk_io_speed, 2);
                     } else {
                         $chart_data['network_activity'][] = 0;
                         $chart_data['disk_io'][] = 0;
@@ -113,10 +161,6 @@ class AnalyticsController extends Controller
                     $chart_data['network_throughput'][] = 0;
                 }
                 
-                // Add response time and system uptime (these come from server data, not logs)
-                $chart_data['response_time'][] = 0; // Placeholder - would need ping data
-                $chart_data['system_uptime'][] = 0; // Placeholder - would need uptime data
-                
                 $last_log = $log;
             }
             
@@ -128,11 +172,20 @@ class AnalyticsController extends Controller
             }
         }
 
+        // Handle AJAX requests for real-time updates
+        if ($request->has('ajax') && $request->ajax) {
+            return response()->json([
+                'chart_data' => $chart_data,
+                'summary' => $summary
+            ]);
+        }
+
         return view('analytics.index', [
             'summary' => $summary,
             'chart_data' => $chart_data,
             'servers' => $servers,
             'selected_server_id' => $selected_server_id,
+            'selected_server' => $selected_server,
             'network_health_summary' => $network_health_summary
         ]);
     }
@@ -179,5 +232,85 @@ class AnalyticsController extends Controller
             'ping_response' => $server->status === 'online' ? 1 : 0,
             'total_transfer' => ($server->network_rx ?? 0) + ($server->network_tx ?? 0)
         ];
+    }
+
+    private function getCurrentSystemUptime($server)
+    {
+        if (!$server) {
+            return '0s';
+        }
+
+        // For localhost, get the actual system uptime
+        if ($this->isLocalhost($server->ip_address)) {
+            return $this->getLocalSystemUptime();
+        }
+
+        // For remote servers, use the stored running_since if available
+        if ($server->status === 'online' && $server->running_since) {
+            $uptime = now()->diffInSeconds($server->running_since);
+            return \Carbon\CarbonInterval::seconds($uptime)->cascade()->forHumans(['short' => true]);
+        }
+
+        return '0s';
+    }
+
+    private function getLocalSystemUptime()
+    {
+        if (PHP_OS_FAMILY === 'Linux') {
+            if (file_exists('/proc/uptime')) {
+                $uptime_seconds = (int)floatval(explode(' ', file_get_contents('/proc/uptime'))[0]);
+                return $this->formatUptimeFromSeconds($uptime_seconds);
+            }
+        } else {
+            // Windows
+            try {
+                $uptimeCmd = 'powershell "[int]((Get-Date) - (Get-CimInstance -ClassName Win32_OperatingSystem).LastBootUpTime).TotalSeconds"';
+                $uptimeSeconds = floatval(trim(shell_exec($uptimeCmd)));
+                return $this->formatUptimeFromSeconds($uptimeSeconds);
+            } catch (\Throwable $e) {
+                return '0s';
+            }
+        }
+        
+        return '0s';
+    }
+
+    private function formatUptimeFromSeconds(float $seconds): string
+    {
+        if ($seconds < 1) {
+            return '0s';
+        }
+
+        $days = floor($seconds / (3600 * 24));
+        $secondsPart = $seconds % (3600 * 24);
+        $hours = floor($secondsPart / 3600);
+        $secondsPart %= 3600;
+        $minutes = floor($secondsPart / 60);
+        $remainingSeconds = floor($secondsPart % 60);
+
+        $parts = [];
+        if ($days > 0) {
+            $parts[] = "{$days}d";
+        }
+        if ($hours > 0) {
+            $parts[] = "{$hours}h";
+        }
+        if ($minutes > 0) {
+            $parts[] = "{$minutes}m";
+        }
+        if ($remainingSeconds > 0) {
+            $parts[] = "{$remainingSeconds}s";
+        }
+
+        if (empty($parts)) {
+            return '0s';
+        }
+
+        return implode(' ', $parts);
+    }
+
+    private function isLocalhost($ip)
+    {
+        return in_array($ip, ['127.0.0.1', 'localhost', '::1']);
     }
 }

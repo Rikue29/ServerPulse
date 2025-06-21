@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Server;
 use App\Models\AlertThreshold;
 use App\Models\Log; // This is your Eloquent Log model
+use App\Models\PerformanceLog;
 use phpseclib3\Net\SSH2;
 use phpseclib3\Crypt\PublicKeyLoader;
 use Exception;
@@ -128,32 +129,20 @@ Write-Output "$cpu|$memory|$disk|$uptime|$network|$diskIO"
                     $systemUptime = $this->formatUptimeFromSeconds($uptimeSeconds);
                     $loadAvg = trim($ssh->exec("uptime | awk -F'load average:' '{print $2}'"));
 
-                    // Network traffic - optimized
-                    $defaultInterface = trim($ssh->exec("ip route | grep default | awk '{print $5}'"));
-                    if (empty($defaultInterface)) {
-                        $defaultInterface = 'eth0';
-                    }
-                    
-                    $netDev = $ssh->exec('cat /proc/net/dev');
-                    $lines = explode("\n", $netDev);
-                    foreach ($lines as $line) {
-                        if (strpos($line, $defaultInterface . ':') !== false) {
-                            $parts = preg_split('/\s+/', trim($line));
-                            $rx = (int)$parts[1];
-                            $tx = (int)$parts[9];
-                            break;
-                        }
-                    }
-
-                    // Disk I/O - optimized
-                    $diskStats = $ssh->exec('cat /proc/diskstats');
-                    $lines = explode("\n", $diskStats);
-                    foreach ($lines as $line) {
-                        if (preg_match('/(sd|vd|nvme[0-9]n[0-9]|vda|vdb|vdc|vdd|vde|vdf|vdg|vdh|vdi|vdj|vdk|vdl|vdm|vdn|vdo|vdp|vdq|vdr|vds|vdt|vdu|vdv|vdw|vdx|vdy|vdz)\s/i', $line)) {
-                            $parts = preg_split('/\s+/', trim($line));
-                            $ioRead += (int)$parts[5] * 512;
-                            $ioWrite += (int)$parts[9] * 512;
-                        }
+                // Network traffic - dynamically find the default interface
+                $defaultInterface = trim($ssh->exec("ip route | grep default | awk '{print $5}'"));
+                if (empty($defaultInterface)) {
+                    $defaultInterface = 'eth0'; // Fallback
+                }
+                
+                $netDev = $ssh->exec('cat /proc/net/dev');
+                $lines = explode("\n", $netDev);
+                foreach ($lines as $line) {
+                    if (strpos($line, $defaultInterface . ':') !== false) {
+                        $parts = preg_split('/\s+/', trim($line));
+                        $rx = (int)$parts[1];
+                        $tx = (int)$parts[9];
+                        break;
                     }
                 }
 
@@ -161,15 +150,38 @@ Write-Output "$cpu|$memory|$disk|$uptime|$network|$diskIO"
                 $previousRx = $server->network_rx ?? 0;
                 $previousTx = $server->network_tx ?? 0;
                 
+                // If new values are less than previous, it means counters reset
                 if ($rx < $previousRx || $tx < $previousTx) {
                     $rx = 0;
                     $tx = 0;
+                }
+                
+                // Startup spike detection: if this is the first measurement after being offline
+                // and there's a huge jump in network activity, smooth it out
+                if ($server->status === 'offline' && ($rx > 0 || $tx > 0)) {
+                    // Server just came online, limit initial network activity
+                    $rx = min($rx, 1000000); // Cap at 1MB
+                    $tx = min($tx, 1000000); // Cap at 1MB
+                }
+
+                // Disk I/O
+                $diskStats = $ssh->exec('cat /proc/diskstats');
+                $lines = explode("\n", $diskStats);
+                foreach ($lines as $line) {
+                    // Look for common disk names like sda, vda, nvme0n1
+                    if (preg_match('/(sd|vd|nvme[0-9]n[0-9]|vda|vdb|vdc|vdd|vde|vdf|vdg|vdh|vdi|vdj|vdk|vdl|vdm|vdn|vdo|vdp|vdq|vdr|vds|vdt|vdu|vdv|vdw|vdx|vdy|vdz)\s/i', $line)) {
+                        $parts = preg_split('/\s+/', trim($line));
+                        $ioRead += (int)$parts[5] * 512; // sectors read to bytes
+                        $ioWrite += (int)$parts[9] * 512; // sectors written to bytes
+                        // We will sum all primary disks, but you could configure a specific one
+                    }
                 }
 
                 // Handle disk I/O counter reset (server restart/offline)
                 $previousRead = $server->disk_io_read ?? 0;
                 $previousWrite = $server->disk_io_write ?? 0;
                 
+                // If new values are less than previous, it means counters reset
                 if ($ioRead < $previousRead || $ioWrite < $previousWrite) {
                     $ioRead = 0;
                     $ioWrite = 0;
@@ -217,9 +229,13 @@ Write-Output "$cpu|$memory|$disk|$uptime|$network|$diskIO"
             $metrics['network_health'] = 'unknown';
             $metrics['ping_response'] = 0;
             $metrics['network_activity'] = 'low';
+            $metrics['response_time'] = 0;
             
-            // Simple ping test for network health
+            // Measure response time and network health
             try {
+                $responseTime = $this->measureResponseTime($server->ip_address);
+                $metrics['response_time'] = $responseTime;
+                
                 if ($this->isLocalhost($server->ip_address)) {
                     $metrics['network_health'] = 'excellent';
                     $metrics['ping_response'] = 1;
@@ -237,6 +253,7 @@ Write-Output "$cpu|$memory|$disk|$uptime|$network|$diskIO"
             } catch (Exception $e) {
                 $metrics['network_health'] = 'unknown';
                 $metrics['ping_response'] = 0;
+                $metrics['response_time'] = 999.9;
             }
             
             // Determine network activity level based on recent transfers
@@ -454,19 +471,28 @@ Write-Output "$cpu|$memory|$disk|$uptime|$network|$diskIO"
             $previousRx = $server->network_rx ?? 0;
             $previousTx = $server->network_tx ?? 0;
             
+            // If new values are less than previous, it means counters reset
             if ($rx < $previousRx || $tx < $previousTx) {
                 $rx = 0;
                 $tx = 0;
             }
+            
+            // Startup spike detection: if this is the first measurement after being offline
+            // and there's a huge jump in network activity, smooth it out
+            if ($server->status === 'offline' && ($rx > 0 || $tx > 0)) {
+                // Server just came online, limit initial network activity
+                $rx = min($rx, 1000000); // Cap at 1MB
+                $tx = min($tx, 1000000); // Cap at 1MB
+            }
         }
 
-        // Disk I/O for local Linux - optimized
+        // Disk I/O for local Linux
         $diskStats = file_get_contents('/proc/diskstats');
         $lines = explode("\n", $diskStats);
         $ioRead = 0;
         $ioWrite = 0;
         foreach ($lines as $line) {
-            if (preg_match('/(sd|vd|nvme[0-9]n[0-9])\s/i', $line)) {
+            if (preg_match('/(sd|vd|nvme[0-9]n[0-9]|vda|vdb|vdc|vdd|vde|vdf|vdg|vdh|vdi|vdj|vdk|vdl|vdm|vdn|vdo|vdp|vdq|vdr|vds|vdt|vdu|vdv|vdw|vdx|vdy|vdz)\s/i', $line)) {
                 $parts = preg_split('/\s+/', trim($line));
                 $ioRead += (int)$parts[5] * 512;
                 $ioWrite += (int)$parts[9] * 512;
@@ -478,6 +504,7 @@ Write-Output "$cpu|$memory|$disk|$uptime|$network|$diskIO"
             $previousRead = $server->disk_io_read ?? 0;
             $previousWrite = $server->disk_io_write ?? 0;
             
+            // If new values are less than previous, it means counters reset
             if ($ioRead < $previousRead || $ioWrite < $previousWrite) {
                 $ioRead = 0;
                 $ioWrite = 0;
@@ -636,19 +663,20 @@ Write-Output "$cpu|$memory|$disk|$uptime|$network|$diskIO"
     }
 
     /**
-     * Measure response time in milliseconds using curl - optimized
+     * Measure response time in milliseconds using curl
      */
     private function measureResponseTime($ipAddress): float
     {
         try {
             if ($this->isLocalhost($ipAddress)) {
+                // For localhost, return a very low response time
                 return 0.1;
             }
 
-            // Optimized response time measurement
+            // Use curl to measure response time
             $startTime = microtime(true);
             
-            // Try to connect to the server on common ports
+            // Try to connect to the server on port 22 (SSH) or port 80 (HTTP)
             $ports = [22, 80, 443];
             $responseTime = 999.9;
             
@@ -657,15 +685,95 @@ Write-Output "$cpu|$memory|$disk|$uptime|$network|$diskIO"
                 $result = shell_exec($curlCmd);
                 
                 if ($result && is_numeric($result)) {
-                    $responseTime = (float)$result * 1000;
-                    break;
+                    $responseTime = (float)$result * 1000; // Convert to milliseconds
+                    break; // Use the first successful connection
+                }
+            }
+            
+            // If curl fails, try a simple TCP connection test
+            if ($responseTime >= 999.9) {
+                $curlCmd = "curl -s -o /dev/null -w '%{time_total}' --connect-timeout 1 --max-time 2 telnet://{$ipAddress}:22 2>/dev/null";
+                $result = shell_exec($curlCmd);
+                
+                if ($result && is_numeric($result)) {
+                    $responseTime = (float)$result * 1000; // Convert to milliseconds
                 }
             }
             
             return $responseTime;
             
         } catch (Exception $e) {
-            return 999.9;
+            return 999.9; // Error occurred
+        }
+    }
+
+    /**
+     * Process agent metrics and create performance log entry
+     */
+    public function processAgentMetrics(Server $server, array $metrics)
+    {
+        try {
+            // Create performance log entry
+            PerformanceLog::create([
+                'server_id' => $server->id,
+                'cpu_usage' => $metrics['cpu_usage'] ?? null,
+                'ram_usage' => $metrics['memory_usage'] ?? null,
+                'disk_usage' => $metrics['disk_usage'] ?? null,
+                'network_rx' => $metrics['network_rx'] ?? 0,
+                'network_tx' => $metrics['network_tx'] ?? 0,
+                'disk_io_read' => $metrics['disk_io_read'] ?? 0,
+                'disk_io_write' => $metrics['disk_io_write'] ?? 0,
+                'response_time' => $metrics['response_time'] ?? null,
+            ]);
+
+            return true;
+        } catch (Exception $e) {
+            \Log::error('Failed to create performance log: ' . $e->getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Check alerts for agent-provided metrics
+     */
+    public function checkAlerts(Server $server, array $metrics)
+    {
+        $thresholds = AlertThreshold::where('server_id', $server->id)->get();
+        
+        foreach ($thresholds as $threshold) {
+            $currentValue = null;
+            $metricName = '';
+            
+            switch (strtoupper($threshold->metric_type)) {
+                case 'CPU':
+                    $currentValue = $metrics['cpu_usage'] ?? 0;
+                    $metricName = 'CPU';
+                    break;
+                case 'RAM':
+                case 'MEMORY':
+                    $currentValue = $metrics['memory_usage'] ?? 0;
+                    $metricName = 'Memory';
+                    break;
+                case 'DISK':
+                    $currentValue = $metrics['disk_usage'] ?? 0;
+                    $metricName = 'Disk';
+                    break;
+                case 'LOAD':
+                    $currentValue = $metrics['load_average'] ?? 0;
+                    $metricName = 'Load Average';
+                    break;
+            }
+            
+            if ($currentValue !== null && $currentValue > $threshold->threshold_value) {
+                // Create alert log
+                Log::create([
+                    'server_id' => $server->id,
+                    'level' => $currentValue > ($threshold->threshold_value * 1.2) ? 'error' : 'warning',
+                    'log_level' => $currentValue > ($threshold->threshold_value * 1.2) ? 'ERROR' : 'WARN',
+                    'message' => "{$metricName} usage ({$currentValue}%) exceeded threshold ({$threshold->threshold_value}%)",
+                    'source' => 'agent_alert'
+                ]);
+            }
         }
     }
 }

@@ -16,9 +16,24 @@
         @if(app()->environment('local'))
             @vite(['resources/css/app.css', 'resources/js/app.js'])
         @else
-            <link rel="stylesheet" href="{{ asset('build/assets/app-BedLfyV1.css') }}">
-            <script type="module" src="{{ asset('build/assets/app-CumOnirq.js') }}"></script>
+            @php
+                $manifestPath = public_path('build/.vite/manifest.json');
+                $manifest = file_exists($manifestPath) ? json_decode(file_get_contents($manifestPath), true) : null;
+                $cssFile = $manifest['resources/css/app.css']['file'] ?? 'app-CUZS7Njb.css';
+                $jsFile = $manifest['resources/js/app.js']['file'] ?? 'app-BWj3x0W0.js';
+            @endphp
+            <link rel="stylesheet" href="{{ asset('build/assets/' . $cssFile) }}">
+            <script type="module" src="{{ asset('build/assets/' . $jsFile) }}"></script>
         @endif
+
+        <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+        
+        <!-- Fallback for Alpine.js if CDN fails -->
+        <script>
+            if (typeof Alpine === 'undefined') {
+                document.write('<script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"><\/script>');
+            }
+        </script>
 
         @livewireStyles
     </head>

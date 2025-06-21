@@ -1,10 +1,16 @@
 #!/bin/bash
 
+# ServerPulse Real-time Monitoring Script
+# Monitors all server metrics in real-time with comprehensive coverage
+
 # Function to cleanup on script exit
 cleanup() {
-    echo "Stopping monitoring service..."
+    echo ""
+    echo "🛑 Stopping ServerPulse monitoring service..."
+    echo "Clearing queues..."
     docker-compose exec php php artisan queue:clear
     docker-compose exec php php artisan queue:flush
+    echo "✅ Monitoring service stopped gracefully"
     exit 0
 }
 
@@ -23,7 +29,7 @@ show_status() {
     echo "   • Threshold Alerts"
     echo "   • Performance Logging"
     echo ""
-    echo "⏱️  Update interval: 2 seconds"
+    echo "⏱️  Update interval: 5 seconds"
     echo "🔄 Queue worker: Running"
     echo "📡 Broadcasting: Active"
     echo ""
@@ -32,17 +38,18 @@ show_status() {
 # Register the cleanup function to run on script termination
 trap cleanup SIGINT SIGTERM
 
-echo "ServerPulse Real-time Monitor with Queue Worker"
+echo "🚀 ServerPulse Real-time Monitor with Queue Worker"
 echo "==================================================="
-echo "Press Ctrl+C to stop the monitoring service"
+echo "📡 Monitoring all server metrics in real-time"
+echo "🔄 Press Ctrl+C to stop the monitoring service"
 echo ""
 
 # Start the queue worker in the background
-echo "Starting queue worker..."
-docker-compose exec -d php php artisan queue:work --queue=default,broadcasting --tries=3
+echo "🔄 Starting queue worker..."
+docker-compose exec -d php php artisan queue:work --queue=default,broadcasting --tries=3 --timeout=60
 
 # Wait a moment for the queue worker to initialize
-sleep 2
+sleep 3
 
 # Check if queue worker started successfully
 if docker-compose exec php php artisan queue:monitor --queue=default | grep -q "running"; then
@@ -61,17 +68,23 @@ counter=0
 while true; do
     counter=$((counter + 1))
     
+    echo "🔄 [$(date '+%H:%M:%S')] Running comprehensive server monitoring... (Cycle #$counter)"
+    
     # 1. Monitor servers and broadcast status (includes all basic metrics)
+    echo "   📡 Broadcasting server status..."
     docker-compose exec -T php php artisan monitor:server
     
     # 2. Update all server metrics (comprehensive metrics update)
+    echo "   📊 Updating server metrics..."
     docker-compose exec -T php php artisan servers:update-metrics
     
     # 3. Check for threshold violations and create alerts
+    echo "   ⚠️  Checking threshold violations..."
     docker-compose exec -T php php artisan debug:monitoring --quiet 2>/dev/null || true
     
     # 4. Clear old performance logs (keep only last 1000 entries per server)
-    if [ $((counter % 50)) -eq 0 ]; then
+    if [ $((counter % 20)) -eq 0 ]; then
+        echo "   🧹 Cleaning old performance logs..."
         docker-compose exec -T php php artisan tinker --execute="
             \$servers = \App\Models\Server::all();
             foreach(\$servers as \$server) {
@@ -81,13 +94,14 @@ while true; do
                         ->orderBy('id', 'asc')
                         ->limit(\$count - 1000)
                         ->delete();
+                    echo 'Cleaned ' . \$logsToDelete . ' old logs for ' . \$server->name . PHP_EOL;
                 }
             }
         " 2>/dev/null || true
     fi
     
-    # 5. Display summary every 25 cycles (every 50 seconds)
-    if [ $((counter % 25)) -eq 0 ]; then
+    # 5. Display summary every 10 cycles
+    if [ $((counter % 10)) -eq 0 ]; then
         echo ""
         echo "📈 Monitoring Summary (Cycle #$counter):"
         docker-compose exec -T php php artisan tinker --execute="
@@ -105,5 +119,6 @@ while true; do
         echo ""
     fi
     
-    sleep 2
+    echo "⏳ Waiting for 5 seconds..."
+    sleep 5
 done

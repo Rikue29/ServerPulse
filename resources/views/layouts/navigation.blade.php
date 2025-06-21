@@ -166,6 +166,81 @@ document.addEventListener('alpine:init', () => {
         }
     }));
 });
+
+// Fallback JavaScript for sidebar toggle if Alpine.js fails
+document.addEventListener('DOMContentLoaded', function() {
+    // Check if Alpine.js is loaded
+    if (typeof Alpine === 'undefined') {
+        console.warn('Alpine.js not loaded, using fallback JavaScript');
+        
+        // Fallback sidebar toggle functionality
+        const sidebar = document.querySelector('[x-data]');
+        const toggleButton = document.querySelector('button[title="Toggle Sidebar"]');
+        const mobileToggleButton = document.querySelector('button i.fa-bars').parentElement;
+        
+        let sidebarMinimized = localStorage.getItem('sidebarMinimized') === 'true';
+        let sidebarOpen = true;
+        
+        // Apply initial state
+        updateSidebarState();
+        
+        // Toggle button click handler
+        if (toggleButton) {
+            toggleButton.addEventListener('click', function() {
+                sidebarMinimized = !sidebarMinimized;
+                localStorage.setItem('sidebarMinimized', sidebarMinimized);
+                updateSidebarState();
+            });
+        }
+        
+        // Mobile toggle button click handler
+        if (mobileToggleButton) {
+            mobileToggleButton.addEventListener('click', function() {
+                sidebarOpen = !sidebarOpen;
+                updateSidebarState();
+            });
+        }
+        
+        function updateSidebarState() {
+            if (sidebar) {
+                // Update classes based on state
+                sidebar.classList.remove('translate-x-0', 'lg:w-64', 'lg:w-16', '-translate-x-full');
+                
+                if (sidebarMinimized) {
+                    sidebar.classList.add('translate-x-0', 'lg:w-16');
+                } else if (sidebarOpen || window.innerWidth >= 1024) {
+                    sidebar.classList.add('translate-x-0', 'lg:w-64');
+                } else {
+                    sidebar.classList.add('-translate-x-full');
+                }
+                
+                // Update toggle button icon
+                const toggleIcon = toggleButton?.querySelector('i');
+                if (toggleIcon) {
+                    toggleIcon.className = `fas ${sidebarMinimized ? 'fa-chevron-right' : 'fa-chevron-left'}`;
+                }
+                
+                // Update text visibility
+                const textElements = sidebar.querySelectorAll('span[class*="lg:hidden"]');
+                textElements.forEach(el => {
+                    if (sidebarMinimized) {
+                        el.classList.add('lg:hidden');
+                    } else {
+                        el.classList.remove('lg:hidden');
+                    }
+                });
+            }
+        }
+        
+        // Handle window resize
+        window.addEventListener('resize', function() {
+            if (window.innerWidth >= 1024) {
+                sidebarOpen = true;
+                updateSidebarState();
+            }
+        });
+    }
+});
 </script>
 
 
