@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Server;
 use App\Models\AlertThreshold;
 use App\Models\Log; // This is your Eloquent Log model
+use App\Models\PerformanceLog;
 use phpseclib3\Net\SSH2;
 use phpseclib3\Crypt\PublicKeyLoader;
 use Exception;
@@ -655,6 +656,76 @@ class ServerMonitoringService
             
         } catch (Exception $e) {
             return 999.9; // Error occurred
+        }
+    }
+
+    /**
+     * Process agent metrics and create performance log entry
+     */
+    public function processAgentMetrics(Server $server, array $metrics)
+    {
+        try {
+            // Create performance log entry
+            PerformanceLog::create([
+                'server_id' => $server->id,
+                'cpu_usage' => $metrics['cpu_usage'] ?? null,
+                'ram_usage' => $metrics['memory_usage'] ?? null,
+                'disk_usage' => $metrics['disk_usage'] ?? null,
+                'network_rx' => $metrics['network_rx'] ?? 0,
+                'network_tx' => $metrics['network_tx'] ?? 0,
+                'disk_io_read' => $metrics['disk_io_read'] ?? 0,
+                'disk_io_write' => $metrics['disk_io_write'] ?? 0,
+                'response_time' => $metrics['response_time'] ?? null,
+            ]);
+
+            return true;
+        } catch (Exception $e) {
+            \Log::error('Failed to create performance log: ' . $e->getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Check alerts for agent-provided metrics
+     */
+    public function checkAlerts(Server $server, array $metrics)
+    {
+        $thresholds = AlertThreshold::where('server_id', $server->id)->get();
+        
+        foreach ($thresholds as $threshold) {
+            $currentValue = null;
+            $metricName = '';
+            
+            switch (strtoupper($threshold->metric_type)) {
+                case 'CPU':
+                    $currentValue = $metrics['cpu_usage'] ?? 0;
+                    $metricName = 'CPU';
+                    break;
+                case 'RAM':
+                case 'MEMORY':
+                    $currentValue = $metrics['memory_usage'] ?? 0;
+                    $metricName = 'Memory';
+                    break;
+                case 'DISK':
+                    $currentValue = $metrics['disk_usage'] ?? 0;
+                    $metricName = 'Disk';
+                    break;
+                case 'LOAD':
+                    $currentValue = $metrics['load_average'] ?? 0;
+                    $metricName = 'Load Average';
+                    break;
+            }
+            
+            if ($currentValue !== null && $currentValue > $threshold->threshold_value) {
+                // Create alert log
+                Log::create([
+                    'server_id' => $server->id,
+                    'level' => $currentValue > ($threshold->threshold_value * 1.2) ? 'error' : 'warning',
+                    'log_level' => $currentValue > ($threshold->threshold_value * 1.2) ? 'ERROR' : 'WARN',
+                    'message' => "{$metricName} usage ({$currentValue}%) exceeded threshold ({$threshold->threshold_value}%)",
+                    'source' => 'agent_alert'
+                ]);
+            }
         }
     }
 }
