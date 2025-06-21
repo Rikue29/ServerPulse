@@ -88,7 +88,6 @@ class MonitorServer extends Command
             ];
             
             broadcast(new ServerStatusUpdated($payload));
-            $this->info("Broadcasted status for {$server->name} ({$server->ip_address})");
         }
     }
 }

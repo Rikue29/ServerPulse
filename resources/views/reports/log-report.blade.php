@@ -229,7 +229,7 @@
                         </div>
                     </div>
                 </div>
-            </div>            <!-- Technical Details -->
+            </div><!-- Technical Details -->
             <div id="alert-details" class="mb-8">
                 <h2 class="text-2xl font-bold text-gray-900 mb-6 flex items-center">
                     <i class="fas fa-server text-blue-600 mr-3"></i>
