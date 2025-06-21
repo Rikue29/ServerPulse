@@ -9,3 +9,7 @@ Route::get('/user', function (Request $request) {
 })->middleware('auth:sanctum');
 
 Route::post('/alerts/trigger', [AlertController::class, 'trigger']);
+
+//To resolve alert path
+Route::patch('/alerts/{alert}/resolve', [AlertController::class, 'resolve']);
+

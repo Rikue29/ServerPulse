@@ -36,6 +36,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     // Analytics Routes
     Route::get('/analytics', [AnalyticsController::class, 'index'])->name('analytics');
+
 });
 
 require __DIR__.'/auth.php';

@@ -65,5 +65,22 @@ class AlertController extends Controller
 
         return response()->json(['message' => 'No threshold breached'], 200);
     }
+
+    public function resolve($id)
+    {
+        $alert = Alert::findOrFail($id);
+
+        if ($alert->status === 'resolved') {
+            return response()->json(['message' => 'Alert is already resolved.'], 200);
+        }
+
+        $alert->update([
+            'status' => 'resolved',
+            'resolved_at' => now(),
+        ]);
+
+        return response()->json(['message' => 'Alert marked as resolved.', 'alert' => $alert], 200);
+    }
+
 }
 
