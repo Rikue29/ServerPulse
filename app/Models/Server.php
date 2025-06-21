@@ -33,7 +33,15 @@ class Server extends Model
         'ssh_password',
         'ssh_key',
         'ssh_port',
-        'system_uptime'
+        'system_uptime',
+        'agent_enabled',
+        'agent_id',
+        'agent_token',
+        'agent_last_heartbeat',
+        'agent_status',
+        'agent_version',
+        'agent_config',
+        'last_metrics'
     ];
 
     /**
@@ -50,7 +58,11 @@ class Server extends Model
         'last_down_at' => 'datetime',
         'running_since' => 'datetime',
         'total_uptime_seconds' => 'integer',
-        'total_downtime_seconds' => 'integer'
+        'total_downtime_seconds' => 'integer',
+        'agent_enabled' => 'boolean',
+        'agent_last_heartbeat' => 'datetime',
+        'agent_config' => 'array',
+        'last_metrics' => 'array'
     ];
 
     /**
@@ -63,7 +75,8 @@ class Server extends Model
 
     protected $hidden = [
         'ssh_password',
-        'ssh_key'
+        'ssh_key',
+        'agent_token'
     ];
 
     /**

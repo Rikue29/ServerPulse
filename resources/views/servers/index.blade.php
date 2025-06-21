@@ -23,6 +23,30 @@
                 <span class="block sm:inline">{{ session('success') }}</span>
             </div>
         @endif
+
+        @if (session('agent_info'))
+            <div class="mb-6 bg-blue-100 border border-blue-400 text-blue-700 px-4 py-3 rounded-lg relative" role="alert">
+                <div class="flex justify-between items-start">
+                    <div class="flex-1">
+                        <h4 class="font-semibold mb-2">📡 Agent Installation Instructions</h4>
+                        <p class="text-sm mb-3">To enable real-time monitoring for this server, install the ServerPulse agent:</p>
+                        <div class="bg-blue-50 p-3 rounded border border-blue-200">
+                            <p class="text-xs text-blue-600 mb-2">1. SSH to your server ({{ session('agent_info')['server_ip'] }})</p>
+                            <p class="text-xs text-blue-600 mb-2">2. Run the following commands:</p>
+                            <code class="text-xs bg-blue-900 text-blue-100 p-2 rounded block font-mono whitespace-pre-wrap">wget https://github.com/shane-kennedy-se/serverpulse-agent/archive/main.zip
+unzip main.zip && cd serverpulse-agent-main
+sudo chmod +x install.sh && sudo ./install.sh</code>
+                            <p class="text-xs text-blue-600 mt-2">3. The agent will automatically register and start monitoring</p>
+                        </div>
+                    </div>
+                    <button onclick="this.parentElement.parentElement.remove()" class="ml-2 text-blue-400 hover:text-blue-600">
+                        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        @endif
         <!-- Search and Add Server Section -->
         <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
             <div class="flex justify-between items-center">
@@ -80,9 +104,17 @@
                                             <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full {{ $server->status === 'online' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800' }}">
                                                 {{ ucfirst($server->status) }}
                                             </span>
+                                            @if($server->agent_enabled)
+                                                <div class="flex items-center mt-1">
+                                                    <span class="inline-flex items-center text-xs">
+                                                        <div class="w-2 h-2 rounded-full mr-1 {{ $server->agent_status === 'active' ? 'bg-green-400' : ($server->agent_status === 'disconnected' ? 'bg-yellow-400' : 'bg-gray-400') }}"></div>
+                                                        Agent {{ ucfirst($server->agent_status ?? 'inactive') }}
+                                                    </span>
+                                                </div>
+                                            @endif
                                             <div class="server-uptime-info text-xs text-gray-500 mt-1">
                                                 @if($server->status === 'online')
-                                                    Uptime: {{ $server->system_uptime ?? 'N/A' }}
+                                                    Uptime: {{ $server->running_since ? \Carbon\CarbonInterval::seconds(now()->diffInSeconds($server->running_since))->cascade()->forHumans(['short' => true]) : 'N/A' }}
                                                 @else
                                                     Downtime: {{ $server->current_downtime_formatted ?? 'N/A' }}
                                                 @endif
@@ -176,4 +208,54 @@
             </div>
         </div>
     </div>
+
+    <script>
+    // Auto-refresh server metrics every 30 seconds
+    setInterval(function() {
+        // Only refresh if we're on the servers page and not editing
+        if (window.location.pathname === '/servers' && !document.querySelector('[x-data]').open) {
+            fetch(window.location.href, {
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(response => response.text())
+            .then(html => {
+                const parser = new DOMParser();
+                const newDoc = parser.parseFromString(html, 'text/html');
+                const newTable = newDoc.querySelector('tbody');
+                const currentTable = document.querySelector('tbody');
+                
+                if (newTable && currentTable) {
+                    // Update table content with smooth transition
+                    currentTable.style.opacity = '0.7';
+                    setTimeout(() => {
+                        currentTable.innerHTML = newTable.innerHTML;
+                        currentTable.style.opacity = '1';
+                    }, 200);
+                    
+                    console.log('Server metrics updated');
+                }
+            })
+            .catch(error => {
+                console.log('Auto-refresh failed:', error);
+            });
+        }
+    }, 30000); // Refresh every 30 seconds
+
+    // Add visual indicator for auto-refresh
+    document.addEventListener('DOMContentLoaded', function() {
+        const header = document.querySelector('.flex.items-center.space-x-2');
+        if (header) {
+            const indicator = document.createElement('div');
+            indicator.innerHTML = `
+                <div class="flex items-center text-sm text-blue-600">
+                    <div class="w-2 h-2 bg-blue-500 rounded-full mr-2 animate-pulse"></div>
+                    Auto-refresh active
+                </div>
+            `;
+            header.appendChild(indicator);
+        }
+    });
+    </script>
 @endsection

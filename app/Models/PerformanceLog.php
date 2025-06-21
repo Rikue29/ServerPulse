@@ -20,6 +20,7 @@ class PerformanceLog extends Model
         'network_tx',
         'disk_io_read',
         'disk_io_write',
+        'response_time',
     ];
 
     protected $casts = [
@@ -30,6 +31,7 @@ class PerformanceLog extends Model
         'network_tx' => 'integer',
         'disk_io_read' => 'integer',
         'disk_io_write' => 'integer',
+        'response_time' => 'float',
     ];
 
     public function server()
