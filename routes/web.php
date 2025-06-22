@@ -5,6 +5,7 @@ use App\Http\Controllers\ServerController;
 use App\Http\Controllers\LogController;
 use App\Http\Controllers\AnalyticsController;
 use App\Http\Livewire\LogDetails;
+use App\Livewire\AlertsTable;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -24,8 +25,15 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 
+
     //Alert Route
     Route::post('/alerts/trigger', [AlertController::class, 'trigger']);
+
+    //Alerts Table Route
+    Route::get('/alerts', function () {
+        return view('alerts');
+    })->name('alerts.index');
+
 
     // Logs Routes
     Route::get('/logs', [LogController::class, 'index'])->name('logs.index');
@@ -36,6 +44,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     // Analytics Routes
     Route::get('/analytics', [AnalyticsController::class, 'index'])->name('analytics');
+
+
 
 });
 
