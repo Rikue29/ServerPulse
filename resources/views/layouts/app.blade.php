@@ -11,9 +11,6 @@
         <link rel="preconnect" href="https://fonts.bunny.net">
         <link href="https://fonts.bunny.net/css?family=figtree:400,500,600&display=swap" rel="stylesheet" />
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-        
-        <!-- Tailwind CSS CDN as fallback -->
-        <script src="https://cdn.tailwindcss.com"></script>
 
         <!-- Scripts -->
         @if(file_exists(public_path('build/manifest.json')))
@@ -26,20 +23,11 @@
                 <link rel="stylesheet" href="{{ asset('build/' . $cssFile) }}">
             @endif
             @if($jsFile)
-                <script type="module" src="{{ asset('build/' . $jsFile) }}"></script>
+                <script type="module" src="{{ asset('build/' . $jsFile) }}" defer></script>
             @endif
         @else
             @vite(['resources/css/app.css', 'resources/js/app.js'])
         @endif
-
-        <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
-        
-        <!-- Fallback for Alpine.js if CDN fails -->
-        <script>
-            if (typeof Alpine === 'undefined') {
-                document.write('<script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"><\/script>');
-            }
-        </script>
 
         @livewireStyles
     </head>

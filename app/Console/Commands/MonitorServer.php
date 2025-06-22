@@ -24,19 +24,6 @@ class MonitorServer extends Command
     public function handle()
     {
         $servers = Server::all();
-        
-        // First, separately update any offline servers with fresh downtime info
-        $offlineServers = $servers->filter(function ($server) {
-            return $server->status === 'offline';
-        });
-        
-        if ($offlineServers->count() > 0) {
-            $this->info("Found {$offlineServers->count()} offline servers - updating downtime");
-            
-            foreach ($offlineServers as $offlineServer) {
-                $this->updateOfflineServerDowntime($offlineServer);
-            }
-        }
 
         foreach ($servers as $server) {
             $wasOnline = $server->status === 'online';
@@ -140,14 +127,13 @@ class MonitorServer extends Command
                 'status' => $server->status,
                 'system_uptime' => $server->status === 'online' && $server->running_since 
                     ? CarbonInterval::seconds(now()->diffInSeconds($server->running_since))->cascade()->forHumans(['short' => true])
-                    : '0s',
+                    : null,
                 'response_time' => $server->status === 'online' ? $server->response_time : 0,
                 'network_rx' => $server->status === 'online' ? $server->network_rx : 0,
                 'network_tx' => $server->status === 'online' ? $server->network_tx : 0,
                 'last_down_at' => $server->last_down_at?->toDateTimeString(),
                 'current_uptime' => $server->status === 'online' && $server->running_since ? $server->running_since->diffInSeconds(now()) : null,
-                'current_downtime' => $server->status === 'offline' && $server->last_down_at ? $server->last_down_at->diffInSeconds(now()) : 0,
-                // Add formatted downtime for offline servers
+                'current_downtime' => $server->status === 'offline' && $server->last_down_at ? $server->last_down_at->diffInSeconds(now()) : null,
                 'formatted_downtime' => $server->status === 'offline' && $server->last_down_at ? 
                     CarbonInterval::seconds($server->last_down_at->diffInSeconds(now()))->cascade()->forHumans(['short' => true]) : null
             ];
@@ -164,44 +150,5 @@ class MonitorServer extends Command
                 }
             }
         }
-    }
-    
-    /**
-     * Update and broadcast the downtime for an offline server
-     */
-    protected function updateOfflineServerDowntime($server)
-    {
-        if ($server->status !== 'offline' || !$server->last_down_at) {
-            return; // Only process servers that are offline and have a last_down_at timestamp
-        }
-        
-        // Calculate current downtime
-        $currentDowntime = $server->last_down_at->diffInSeconds(now());
-        $formattedDowntime = CarbonInterval::seconds($currentDowntime)->cascade()->forHumans(['short' => true]);
-        
-        $this->info("Server {$server->name} is OFFLINE - Current downtime: {$formattedDowntime} ({$currentDowntime} seconds)");
-        
-        // Create a payload focused on accurate downtime
-        $payload = [
-            'server_id' => $server->id,
-            'name' => $server->name,
-            'ip_address' => $server->ip_address,
-            'status' => 'offline',
-            'cpu_usage' => 0,
-            'ram_usage' => 0,
-            'disk_usage' => 0,
-            'response_time' => 0,
-            'network_rx' => 0,
-            'network_tx' => 0,
-            'system_uptime' => '0s',
-            'last_down_at' => $server->last_down_at->toDateTimeString(),
-            'current_downtime' => $currentDowntime,
-            'formatted_downtime' => $formattedDowntime,
-            'last_checked_at' => now()->toDateTimeString(),
-        ];
-        
-        // Broadcast the downtime update
-        broadcast(new ServerStatusUpdated($payload));
-        $this->info("Broadcasted updated downtime for {$server->name}");
     }
 }

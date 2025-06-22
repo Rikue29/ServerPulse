@@ -21,6 +21,3 @@ Route::prefix('v1/agents')->group(function () {
         Route::get('/{agentId}/commands', [AgentController::class, 'commands']);
     });
 });
-
-// Temporary test route - TODO: remove after testing
-Route::get('check-heartbeats', 'App\Http\Controllers\API\AgentController@checkAllServersHeartbeats');

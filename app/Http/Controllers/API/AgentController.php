@@ -188,16 +188,16 @@ class AgentController extends Controller
                 'ram_usage' => $server->ram_usage,
                 'disk_usage' => $server->disk_usage,
                 'status' => $server->status,
-                'system_uptime' => $formattedUptime,
+                'system_uptime' => $server->status === 'online' ? $formattedUptime : null,
                 'response_time' => $server->response_time,
                 'network_rx' => $metrics['network_rx'] ?? 0,
                 'network_tx' => $metrics['network_tx'] ?? 0,
                 'disk_io_read' => $metrics['disk_io_read'] ?? 0,
                 'disk_io_write' => $metrics['disk_io_write'] ?? 0,
                 'last_down_at' => $server->last_down_at?->toDateTimeString(),
-                'current_uptime' => $uptimeSeconds,
-                'current_downtime' => null, // No downtime when server is up
-                'formatted_downtime' => null // No downtime when server is up
+                'current_uptime' => $server->status === 'online' ? $uptimeSeconds : null,
+                'current_downtime' => $server->status === 'offline' && $server->last_down_at ? now()->diffInSeconds($server->last_down_at) : null,
+                'formatted_downtime' => $server->status === 'offline' && $server->last_down_at ? $this->formatUptime(now()->diffInSeconds($server->last_down_at)) : null
             ];
             
             // Broadcast status update for real-time display

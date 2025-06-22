@@ -25,10 +25,10 @@ class Kernel extends ConsoleKernel
 
         // Run the dedicated offline server update command every 5 seconds
         // This ensures downtime counters update in real-time
-        $schedule->command('server:update-offline-downtime')
-            ->everyFiveSeconds()
-            ->withoutOverlapping()
-            ->runInBackground();
+        // $schedule->command('server:update-offline-downtime')
+        //     ->everyFiveSeconds()
+        //     ->withoutOverlapping()
+        //     ->runInBackground();
     }
 
     /**
@@ -42,4 +42,4 @@ class Kernel extends ConsoleKernel
 
         require base_path('routes/console.php');
     }
-} 
+}
