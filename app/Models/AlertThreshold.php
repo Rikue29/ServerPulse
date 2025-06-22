@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class AlertThreshold extends Model
 {    protected $fillable = [
@@ -12,4 +13,12 @@ class AlertThreshold extends Model
         'notification_channel',
         'created_by',
     ];
+
+    /**
+     * Get the server that owns the alert threshold.
+     */
+    public function server(): BelongsTo
+    {
+        return $this->belongsTo(Server::class);
+    }
 }

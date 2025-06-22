@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Server extends Model
 {
@@ -59,6 +60,22 @@ class Server extends Model
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    /**
+     * Get the logs for the server.
+     */
+    public function logs(): HasMany
+    {
+        return $this->hasMany(Log::class);
+    }
+
+    /**
+     * Get the alert thresholds for the server.
+     */
+    public function alertThresholds(): HasMany
+    {
+        return $this->hasMany(AlertThreshold::class);
     }
 
     protected $hidden = [

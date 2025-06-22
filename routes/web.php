@@ -4,6 +4,7 @@ use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ServerController;
 use App\Http\Controllers\LogController;
 use App\Http\Controllers\AnalyticsController;
+use App\Http\Controllers\DashboardController;
 use App\Http\Livewire\LogDetails;
 use Illuminate\Support\Facades\Route;
 
@@ -13,8 +14,8 @@ Route::get('/', function () {
 
 // Protected routes requiring authentication
 Route::middleware(['auth', 'verified'])->group(function () {
-    // Dashboard (Server List)
-    Route::get('/dashboard', [ServerController::class, 'index'])->name('dashboard');
+    // Dashboard (Livewire Component)
+    Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
     
     // Server Management Routes
     Route::resource('servers', ServerController::class);

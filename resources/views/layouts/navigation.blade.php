@@ -31,6 +31,13 @@
 
         <!-- Navigation Links -->
         <nav class="flex-1 px-2 py-2 space-y-1 overflow-y-auto">
+            <a href="{{ route('dashboard') }}" 
+               class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-colors duration-200 {{ request()->routeIs('dashboard') ? 'bg-blue-50 text-blue-700' : 'text-gray-900 hover:bg-gray-100' }}"
+               :class="{ 'justify-center': sidebarMinimized }">
+                <i class="fas fa-dashboard text-lg w-5"></i>
+                <span :class="{ 'lg:hidden': sidebarMinimized }" class="ml-3 transition-opacity duration-300">Dashboard</span>
+            </a>
+
             <a href="{{ route('servers.index') }}" 
                class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-colors duration-200 {{ request()->routeIs('servers.*') ? 'bg-blue-50 text-blue-700' : 'text-gray-900 hover:bg-gray-100' }}"
                :class="{ 'justify-center': sidebarMinimized }">
@@ -52,8 +59,8 @@
                 <span :class="{ 'lg:hidden': sidebarMinimized }" class="ml-3 transition-opacity duration-300">Alerts</span>
             </a>
 
-            <a href="{{ route('analytics') }}" 
-               class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-colors duration-200 {{ request()->routeIs('analytics') ? 'bg-blue-50 text-blue-700' : 'text-gray-900 hover:bg-gray-100' }}"
+            <a href="/analytics" 
+               class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-colors duration-200 {{ request()->is('analytics') ? 'bg-blue-50 text-blue-700' : 'text-gray-900 hover:bg-gray-100' }}"
                :class="{ 'justify-center': sidebarMinimized }">
                 <i class="fas fa-chart-bar text-lg w-5"></i>
                 <span :class="{ 'lg:hidden': sidebarMinimized }" class="ml-3 transition-opacity duration-300">Analytics</span>
