@@ -1,5 +1,5 @@
 @extends('layouts.app')
 
 @section('content')
-    @livewire('alerts-table')
+    @livewire('hello-world')
 @endsection

@@ -29,11 +29,17 @@ Route::middleware(['auth', 'verified'])->group(function () {
     //Alert Route
     Route::post('/alerts/trigger', [AlertController::class, 'trigger']);
 
-    //Alerts Table Route
+    //Test Alert Route
+    Route::get('/test-alerts', function () {
+        return view('test-alerts');
+    });
+
+
+    //Route::get('/alerts', \App\Livewire\AlertsTable::class)->name('alerts.index');
+
     Route::get('/alerts', function () {
         return view('alerts');
     })->name('alerts.index');
-
 
     // Logs Routes
     Route::get('/logs', [LogController::class, 'index'])->name('logs.index');
@@ -44,6 +50,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     // Analytics Routes
     Route::get('/analytics', [AnalyticsController::class, 'index'])->name('analytics');
+
+
+    //Test
+    Route::get('/hello', function () {
+    return view('test-hello'); 
+});
 
 
 

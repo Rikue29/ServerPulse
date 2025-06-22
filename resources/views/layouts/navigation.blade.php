@@ -45,7 +45,7 @@
                 <span :class="{ 'lg:hidden': sidebarMinimized }" class="ml-3 transition-opacity duration-300">Logs</span>
             </a>
 
-            <a href="#" 
+            <a href="{{route('alerts.index')}}" 
                class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg text-gray-900 hover:bg-gray-100 transition-colors duration-200"
                :class="{ 'justify-center': sidebarMinimized }">
                 <i class="fas fa-bell text-lg w-5"></i>
