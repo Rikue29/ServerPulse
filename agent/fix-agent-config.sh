@@ -2,7 +2,7 @@
 # Quick fix script to update ServerPulse agent configuration
 # This script updates the endpoint IP address
 
-IP_ADDRESS="192.168.0.101"
+IP_ADDRESS="192.168.81.1"
 CONFIG_FILE="/etc/serverpulse-agent/config.yml"
 
 echo "🔧 Updating ServerPulse Agent Configuration"
@@ -24,7 +24,7 @@ echo ""
 echo "🔄 Updating endpoint to use IP address..."
 
 # Update the endpoint in the config file
-sudo sed -i "s|endpoint: \".*\"|endpoint: \"http://$IP_ADDRESS:8080\"|" "$CONFIG_FILE"
+sudo sed -i "s|endpoint: \".*\"|endpoint: \"http://$IP_ADDRESS\"|" "$CONFIG_FILE"
 
 echo "✅ Configuration updated!"
 echo ""
@@ -45,7 +45,7 @@ sudo systemctl status serverpulse-agent --no-pager -l
 
 echo ""
 echo "🔍 Testing connectivity to ServerPulse..."
-curl -s -o /dev/null -w "HTTP Status: %{http_code}\nResponse Time: %{time_total}s\n" "http://$IP_ADDRESS:8080/" || echo "❌ Could not connect to ServerPulse server"
+curl -s -o /dev/null -w "HTTP Status: %{http_code}\nResponse Time: %{time_total}s\n" "http://$IP_ADDRESS/" || echo "❌ Could not connect to ServerPulse server"
 
 echo ""
 echo "📋 Recent logs (last 10 lines):"
@@ -55,6 +55,6 @@ echo ""
 echo "🎯 Next steps:"
 echo "1. Monitor logs: sudo journalctl -u serverpulse-agent -f"
 echo "2. Check agent status: sudo systemctl status serverpulse-agent"
-echo "3. Add server in ServerPulse web interface: http://$IP_ADDRESS:8080/servers"
+echo "3. Add server in ServerPulse web interface: http://$IP_ADDRESS/servers"
 echo ""
 echo "✨ Configuration update complete!"

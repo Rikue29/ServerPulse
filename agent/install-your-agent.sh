@@ -41,14 +41,9 @@ mkdir -p /opt/serverpulse-agent
 mkdir -p /etc/serverpulse-agent
 mkdir -p /var/log/serverpulse-agent
 
-# Download agent from GitHub
-echo ""
-echo "⬇️ Downloading ServerPulse agent from GitHub..."
-cd /tmp
-rm -rf serverpulse-agent-main* 2>/dev/null || true
-wget -q https://github.com/shane-kennedy-se/serverpulse-agent/archive/main.zip
-unzip -q main.zip
-cd serverpulse-agent-main
+# Set agent source directory to the location of this script
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
+echo "📂 Using agent files from local directory: $SCRIPT_DIR"
 
 # Create virtual environment to avoid external environment error
 echo "🐍 Creating Python virtual environment..."
@@ -59,16 +54,17 @@ echo "📋 Installing Python dependencies..."
 /opt/serverpulse-agent/venv/bin/pip install -q --upgrade pip
 
 # Install dependencies from requirements.txt
-if [ -f "requirements.txt" ]; then
-    /opt/serverpulse-agent/venv/bin/pip install -q -r requirements.txt
+if [ -f "$SCRIPT_DIR/requirements.txt" ]; then
+    /opt/serverpulse-agent/venv/bin/pip install -q -r "$SCRIPT_DIR/requirements.txt"
 else
     # Install common dependencies if requirements.txt is missing
+    echo "📝 requirements.txt not found. Installing default dependencies."
     /opt/serverpulse-agent/venv/bin/pip install -q requests psutil pyyaml
 fi
 
 # Copy agent files
 echo "📄 Copying agent files..."
-cp -r * /opt/serverpulse-agent/
+cp -r "$SCRIPT_DIR"/* /opt/serverpulse-agent/
 chmod +x /opt/serverpulse-agent/*.py
 
 # Create agent user

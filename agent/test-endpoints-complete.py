@@ -11,7 +11,7 @@ import sys
 from datetime import datetime
 
 # ServerPulse endpoint
-BASE_URL = "http://serverpulse.test:8080"
+BASE_URL = "http://192.168.81.1"
 
 def test_endpoint(endpoint, method='GET', data=None, description="", auth_token=None):
     """Test an API endpoint"""
@@ -57,7 +57,7 @@ def main():
     # Check if ServerPulse is accessible
     success, _ = test_endpoint("/", description="ServerPulse homepage")
     if not success:
-        print("\n❌ Cannot reach ServerPulse at http://serverpulse.test:8080")
+        print("\n❌ Cannot reach ServerPulse at http://192.168.81.1")
         print("   Make sure ServerPulse is running and accessible.")
         sys.exit(1)
     

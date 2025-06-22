@@ -86,6 +86,27 @@ services:
     depends_on:
       - mysql
       - php
+      
+  # Downtime Broadcaster Service (runs at high frequency)
+  downtime-broadcaster:
+    image: php:8.2-fpm
+    volumes:
+      - .:/var/www/html
+    networks:
+      - webapp-network
+    command: >
+      bash -c "apt-get update && apt-get install -y 
+      libzip-dev git unzip
+      && docker-php-ext-install pdo pdo_mysql zip opcache
+      && curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
+      && cd /var/www/html 
+      && composer install --no-interaction
+      && php artisan config:cache
+      && while true; do php artisan server:update-offline-downtime; sleep 3; done"
+    restart: unless-stopped
+    depends_on:
+      - mysql
+      - php
 
   # Queue Worker Service
   queue:
@@ -101,7 +122,29 @@ services:
       && curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer \
       && cd /var/www/html \
       && composer install --no-interaction \
-      && php artisan queue:work --sleep=3 --tries=3"
+      && php artisan queue:work --queue=default,broadcasting --sleep=3 --tries=3 --timeout=60"
+    restart: unless-stopped
+    depends_on:
+      - mysql
+      - php
+
+  # Monitor Worker Service (for real-time updates)
+  monitor:
+    image: php:8.2-fpm
+    volumes:
+      - .:/var/www/html
+    networks:
+      - webapp-network
+    command: >
+      bash -c "apt-get update && apt-get install -y \
+      libzip-dev git unzip procps \
+      && docker-php-ext-install pdo pdo_mysql zip opcache \
+      && curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer \
+      && cd /var/www/html \
+      && composer install --no-interaction \
+      && php artisan config:cache \
+      && while true; do php artisan server:check-status --all; sleep 5; done"
+    restart: unless-stopped
     depends_on:
       - mysql
       - php

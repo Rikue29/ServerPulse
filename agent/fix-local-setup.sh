@@ -5,7 +5,7 @@
 echo "🔧 Fixing ServerPulse Agent Configuration for Local Development"
 echo "=============================================================="
 
-IP="192.168.0.101"
+IP="192.168.81.1"
 CONFIG_FILE="/etc/serverpulse-agent/config.yml"
 
 echo "1. Testing connectivity to ServerPulse server..."
@@ -19,12 +19,12 @@ fi
 
 echo ""
 echo "2. Testing ServerPulse application..."
-HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://$IP:8080/ 2>/dev/null || echo "000")
+HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://$IP/ 2>/dev/null || echo "000")
 if [ "$HTTP_STATUS" = "200" ] || [ "$HTTP_STATUS" = "302" ]; then
     echo "   ✅ ServerPulse is running (HTTP $HTTP_STATUS)"
 else
     echo "   ⚠️  ServerPulse may not be running (HTTP $HTTP_STATUS)"
-    echo "   Make sure to start ServerPulse with: php artisan serve --host=0.0.0.0 --port=8080"
+    echo "   Make sure to start ServerPulse with: php artisan serve --host=0.0.0.0"
 fi
 
 echo ""
@@ -33,7 +33,7 @@ if [ -f "$CONFIG_FILE" ]; then
     echo "   Current endpoint:"
     grep "endpoint:" "$CONFIG_FILE" | head -1
     
-    sudo sed -i "s|endpoint: \".*\"|endpoint: \"http://$IP:8080\"|" "$CONFIG_FILE"
+    sudo sed -i "s|endpoint: \".*\"|endpoint: \"http://$IP\"|" "$CONFIG_FILE"
     
     echo "   New endpoint:"
     grep "endpoint:" "$CONFIG_FILE" | head -1
@@ -69,8 +69,8 @@ sudo journalctl -u serverpulse-agent -n 5 --no-pager
 
 echo ""
 echo "🎯 Next Steps:"
-echo "1. Make sure ServerPulse is running: php artisan serve --host=0.0.0.0 --port=8080"
-echo "2. Add this server in ServerPulse web interface: http://$IP:8080/servers"
+echo "1. Make sure ServerPulse is running: php artisan serve --host=0.0.0.0"
+echo "2. Add this server in ServerPulse web interface: http://$IP/servers"
 echo "3. Monitor logs: sudo journalctl -u serverpulse-agent -f"
 echo ""
 echo "✨ Configuration complete!"

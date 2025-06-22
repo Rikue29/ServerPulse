@@ -65,10 +65,10 @@ def validate_config():
         
         # Check endpoint
         endpoint = config.get('server', {}).get('endpoint', '')
-        if 'serverpulse.test:8080' in endpoint:
+        if '192.168.81.1' in endpoint:
             print(f"✅ Endpoint correctly configured: {endpoint}")
         else:
-            print(f"⚠️  Endpoint: {endpoint} (should contain serverpulse.test:8080)")
+            print(f"⚠️  Endpoint: {endpoint} (should contain 192.168.81.1)")
         
         return True
         
@@ -133,10 +133,9 @@ def validate_install_script():
         
         required_elements = [
             'python3-venv',
-            'serverpulse.test:8080',
             'systemctl',
             '/opt/serverpulse-agent',
-            'shane-kennedy-se/serverpulse-agent'
+            'SCRIPT_DIR='
         ]
         
         for element in required_elements:
