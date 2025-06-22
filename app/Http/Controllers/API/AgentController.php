@@ -296,10 +296,19 @@ class AgentController extends Controller
 
         try {
             foreach ($request->alerts as $alert) {
+                // Map severity levels to correct enum values
+                $logLevel = match(strtolower($alert['severity'])) {
+                    'warning', 'warn' => 'WARNING',
+                    'error' => 'ERROR',
+                    'critical' => 'CRITICAL',
+                    'notice' => 'NOTICE',
+                    default => 'INFO'
+                };
+                
                 Log::create([
                     'server_id' => $server->id,
                     'level' => $alert['severity'],
-                    'log_level' => strtoupper($alert['severity']),
+                    'log_level' => $logLevel,
                     'message' => $alert['message'],
                     'source' => 'agent'
                 ]);
@@ -363,7 +372,7 @@ class AgentController extends Controller
             $criticalLogs[] = [
                 'server_id' => $server->id,
                 'level' => 'warning',
-                'log_level' => 'WARN',
+                'log_level' => 'WARNING',
                 'message' => "High CPU usage detected: {$metrics['cpu_usage']}%",
                 'source' => 'agent',
                 'created_at' => now(),
@@ -375,7 +384,7 @@ class AgentController extends Controller
             $criticalLogs[] = [
                 'server_id' => $server->id,
                 'level' => 'warning',
-                'log_level' => 'WARN',
+                'log_level' => 'WARNING',
                 'message' => "High memory usage detected: {$metrics['memory_usage']}%",
                 'source' => 'agent',
                 'created_at' => now(),
@@ -480,7 +489,7 @@ class AgentController extends Controller
                 \App\Models\Log::create([
                     'server_id' => $server->id,
                     'level' => 'warning',
-                    'log_level' => 'WARN',
+                    'log_level' => 'WARNING',
                     'message' => "Server marked offline: No heartbeat received since {$lastHeartbeat->format('Y-m-d H:i:s')}",
                     'source' => 'system'
                 ]);

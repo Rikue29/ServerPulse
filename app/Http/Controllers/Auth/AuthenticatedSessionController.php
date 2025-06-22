@@ -24,11 +24,20 @@ class AuthenticatedSessionController extends Controller
      */
     public function store(LoginRequest $request): RedirectResponse
     {
-        $request->authenticate();
+        try {
+            $request->authenticate();
 
-        $request->session()->regenerate();
+            $request->session()->regenerate();
 
-        return redirect()->intended(route('dashboard', absolute: false));
+            return redirect()->intended(route('dashboard', absolute: false));
+        } catch (\Exception $e) {
+            // Log the error for debugging
+            \Log::error('Login error: ' . $e->getMessage());
+            
+            return redirect()->back()
+                ->withErrors(['email' => 'Authentication failed: ' . $e->getMessage()])
+                ->withInput($request->only('email'));
+        }
     }
 
     /**

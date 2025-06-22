@@ -4,8 +4,16 @@ use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ServerController;
 use App\Http\Controllers\LogController;
 use App\Http\Controllers\AnalyticsController;
+use App\Http\Controllers\API\AutoRegisterController;
 use App\Http\Livewire\LogDetails;
 use Illuminate\Support\Facades\Route;
+
+// Public agent installation routes (no auth required)
+Route::get('/agent/install.sh', [AutoRegisterController::class, 'installScript']);
+Route::get('/agent/download', [AutoRegisterController::class, 'downloadAgent']);
+Route::get('/install', function() {
+    return view('install-agent');
+});
 
 Route::get('/', function () {
     return redirect()->route('dashboard');

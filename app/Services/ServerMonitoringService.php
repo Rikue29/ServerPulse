@@ -725,7 +725,7 @@ class ServerMonitoringService
                 Log::create([
                     'server_id' => $server->id,
                     'level' => $currentValue > ($threshold->threshold_value * 1.2) ? 'error' : 'warning',
-                    'log_level' => $currentValue > ($threshold->threshold_value * 1.2) ? 'ERROR' : 'WARN',
+                    'log_level' => $currentValue > ($threshold->threshold_value * 1.2) ? 'ERROR' : 'WARNING',
                     'message' => "{$metricName} usage ({$currentValue}%) exceeded threshold ({$threshold->threshold_value}%)",
                     'source' => 'agent_alert'
                 ]);

@@ -11,19 +11,25 @@
         <link rel="preconnect" href="https://fonts.bunny.net">
         <link href="https://fonts.bunny.net/css?family=figtree:400,500,600&display=swap" rel="stylesheet" />
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+        
+        <!-- Tailwind CSS CDN as fallback -->
+        <script src="https://cdn.tailwindcss.com"></script>
 
         <!-- Scripts -->
-        @if(app()->environment('local'))
-            @vite(['resources/css/app.css', 'resources/js/app.js'])
-        @else
+        @if(file_exists(public_path('build/manifest.json')))
             @php
-                $manifestPath = public_path('build/.vite/manifest.json');
-                $manifest = file_exists($manifestPath) ? json_decode(file_get_contents($manifestPath), true) : null;
-                $cssFile = $manifest['resources/css/app.css']['file'] ?? 'app-CUZS7Njb.css';
-                $jsFile = $manifest['resources/js/app.js']['file'] ?? 'app-BWj3x0W0.js';
+                $manifest = json_decode(file_get_contents(public_path('build/manifest.json')), true);
+                $cssFile = $manifest['resources/css/app.css']['file'] ?? null;
+                $jsFile = $manifest['resources/js/app.js']['file'] ?? null;
             @endphp
-            <link rel="stylesheet" href="{{ asset('build/assets/' . $cssFile) }}">
-            <script type="module" src="{{ asset('build/assets/' . $jsFile) }}"></script>
+            @if($cssFile)
+                <link rel="stylesheet" href="{{ asset('build/' . $cssFile) }}">
+            @endif
+            @if($jsFile)
+                <script type="module" src="{{ asset('build/' . $jsFile) }}"></script>
+            @endif
+        @else
+            @vite(['resources/css/app.css', 'resources/js/app.js'])
         @endif
 
         <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
@@ -38,7 +44,9 @@
         @livewireStyles
     </head>
     <body class="font-sans antialiased h-full">
-        @include('layouts.navigation')
+        <div class="min-h-full">
+            @include('layouts.navigation')
+        </div>
 
         @livewireScripts
         @stack('scripts')

@@ -119,9 +119,17 @@
             <div class="login-box">
                 <h2>Login</h2>
                 <div class="subtext">login to access to the server</div>
-                <form method="POST" action="#">
-                    <!-- @csrf -->
-                    <input type="email" name="email" placeholder="Email Address" required />
+                
+                @if ($errors->any())
+                    <div style="background-color: #fee; padding: 10px; border-radius: 6px; margin-bottom: 15px; border: 1px solid #fcc;">
+                        @foreach ($errors->all() as $error)
+                            <div style="color: #c33; font-size: 14px;">{{ $error }}</div>
+                        @endforeach
+                    </div>
+                @endif
+                <form method="POST" action="{{ route('login') }}">
+                    @csrf
+                    <input type="email" name="email" placeholder="Email Address" value="{{ old('email') }}" required />
                     <input type="password" name="password" placeholder="Password" required />
                     <button type="submit">Login</button>
                 </form>
