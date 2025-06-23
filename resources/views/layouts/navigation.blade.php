@@ -45,7 +45,7 @@
                 <span :class="{ 'lg:hidden': sidebarMinimized }" class="ml-3 transition-opacity duration-300">Logs</span>
             </a>
 
-            <a href="#" 
+            <a href="{{route('alerts.index')}}" 
                class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg text-gray-900 hover:bg-gray-100 transition-colors duration-200"
                :class="{ 'justify-center': sidebarMinimized }">
                 <i class="fas fa-bell text-lg w-5"></i>
@@ -107,11 +107,38 @@
 
                 <!-- Right Side Items -->
                 <div class="flex items-center space-x-4 ml-auto">
-                    <!-- Notifications -->
-                    <button class="p-1.5 rounded-lg text-gray-600 hover:bg-gray-100 focus:outline-none relative">
-                        <i class="fas fa-bell text-xl"></i>
-                        <span class="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full"></span>
-                    </button>
+                    <!-- Notifications Dropdown -->
+                    <div x-data="{ open: false }" class="relative">
+                        <!-- Bell Icon -->
+                        <button @click="open = !open" class="p-1.5 rounded-lg text-gray-600 hover:bg-gray-100 focus:outline-none relative">
+                            <i class="fas fa-bell text-xl"></i>
+                            <span class="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full"></span>
+                        </button>
+
+                        <!-- Dropdown Panel -->
+                        <div
+                            x-show="open"
+                            @click.away="open = false"
+                            class="absolute right-0 mt-2 w-96 bg-white border border-gray-200 rounded-lg shadow-lg z-50"
+                        >
+                            <div class="p-3 font-semibold border-b">Recent Alerts</div>
+                            <ul class="max-h-64 overflow-y-auto divide-y">
+                                @forelse($recentAlerts as $alert)
+                                    <li class="px-4 py-2 text-sm text-gray-700">
+                                        <i class="fas fa-exclamation-triangle text-red-500 mr-1"></i>
+                                        <span class="font-semibold text-red-600 uppercase">
+                                            {{ $alert->alert_type }}
+                                        </span>
+                                        on server #{{ $alert->server_id }}<br>
+                                        <span class="text-xs text-gray-700">{{ $alert->alert_message }}</span><br>
+                                        <span class="text-xs text-gray-400">{{ \Carbon\Carbon::parse($alert->alert_time)->diffForHumans() }}</span>
+                                    </li>
+                                @empty
+                                    <li class="px-4 py-2 text-sm text-gray-500">No recent alerts</li>
+                                @endforelse
+                            </ul>
+                        </div>
+                    </div>
 
                     <!-- Profile Dropdown -->
                     <div class="relative" x-data="{ open: false }">
