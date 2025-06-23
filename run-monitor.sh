@@ -62,7 +62,11 @@ while true; do
     counter=$((counter + 1))
     
     # 1. Monitor servers and broadcast status (includes all basic metrics)
+    # More frequent updates for smoother real-time graphs
     docker-compose exec -T php php artisan monitor:server
+    
+    # Small delay to avoid overwhelming the browser
+    sleep 0.5
     
     # 2. Update all server metrics (comprehensive metrics update)
     docker-compose exec -T php php artisan servers:update-metrics

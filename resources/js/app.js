@@ -494,6 +494,9 @@ function updatePerformanceChart(eventData, actualThroughput) {
     }
     
     const serverId = eventData.server_id;
+    // Get current timestamp in milliseconds for calculations - FIX: add currentTimestamp here
+    const currentTimestamp = Date.now();
+    
     // Use the log's actual timestamp if available, else fallback to browser time
     let labelTime = null;
     if (eventData.created_at) {
@@ -526,7 +529,7 @@ function updatePerformanceChart(eventData, actualThroughput) {
     const currentDiskIORead = parseInt(eventData.disk_io_read || 0, 10);
     const currentDiskIOWrite = parseInt(eventData.disk_io_write || 0, 10);
     
-    if (lastDiskIORead[serverId] !== undefined && lastDiskIOWrite[serverId] !== undefined) {
+    if (lastDiskIORead[serverId] !== undefined && lastDiskIOWrite[serverId] !== undefined && lastUpdateTime[serverId] !== undefined) {
         // Use the same timestamp as network calculations for consistency
         const timeDiff = (currentTimestamp - lastUpdateTime[serverId]) / 1000;
         
@@ -565,6 +568,8 @@ function updatePerformanceChart(eventData, actualThroughput) {
     
     lastDiskIORead[serverId] = currentDiskIORead;
     lastDiskIOWrite[serverId] = currentDiskIOWrite;
+    // Store the timestamp for future calculations
+    lastUpdateTime[serverId] = currentTimestamp;
     
     // Update chart data
     const chart = window.performanceChart;
@@ -583,12 +588,49 @@ function updatePerformanceChart(eventData, actualThroughput) {
         return;
     }
     
-    // Update datasets with safety checks
-    if (datasets[0] && datasets[0].data) datasets[0].data.push(eventData.cpu_usage || 0); // CPU
-    if (datasets[1] && datasets[1].data) datasets[1].data.push(eventData.ram_usage || 0); // Memory
-    if (datasets[2] && datasets[2].data) datasets[2].data.push(calculateNetworkActivity(eventData)); // Network Activity
-    if (datasets[3] && datasets[3].data) datasets[3].data.push(diskIOThroughput); // Disk I/O
-    if (datasets[4] && datasets[4].data) datasets[4].data.push(eventData.disk_usage || 0); // Disk Usage
+    // Update datasets with safety checks and ensure we maintain exactly 50 data points
+    // For each dataset, check if we need to shift out the oldest point before adding a new one
+    const ensureMaxPoints = (dataset) => {
+        if (!dataset) return false; // Skip if dataset doesn't exist
+        if (!dataset.data) dataset.data = []; // Initialize data array if missing
+        
+        // Make sure we have max 50 points
+        while (dataset.data && dataset.data.length >= 50) {
+            dataset.data.shift(); // Remove oldest point first
+        }
+        
+        return true; // Dataset is ready
+    };
+    
+    // CPU Usage
+    if (datasets[0] && datasets[0].data) {
+        ensureMaxPoints(datasets[0]);
+        datasets[0].data.push(eventData.cpu_usage || 0);
+    }
+    
+    // RAM Usage
+    if (datasets[1] && datasets[1].data) {
+        ensureMaxPoints(datasets[1]);
+        datasets[1].data.push(eventData.ram_usage || 0);
+    }
+    
+    // Network Activity
+    if (datasets[2] && datasets[2].data) {
+        ensureMaxPoints(datasets[2]);
+        datasets[2].data.push(calculateNetworkActivity(eventData));
+    }
+    
+    // Disk I/O
+    if (datasets[3] && datasets[3].data) {
+        ensureMaxPoints(datasets[3]);
+        datasets[3].data.push(diskIOThroughput);
+    }
+    
+    // Disk Usage
+    if (datasets[4] && datasets[4].data) {
+        ensureMaxPoints(datasets[4]);
+        datasets[4].data.push(eventData.disk_usage || 0);
+    }
     
     // Network Throughput - EMERGENCY DIRECT CHART UPDATE
     if (datasets[5] && datasets[5].data) {
@@ -600,12 +642,20 @@ function updatePerformanceChart(eventData, actualThroughput) {
         // CRITICAL: Make throughput dataset visible
         datasets[5].hidden = false;
         
+        // FIXED: Check if we need to trim data first to avoid exceeding 50 points
+        if (datasets[5].data.length >= 50) {
+            datasets[5].data.shift(); // Remove oldest point first to maintain max 50 points
+        }
+        
         // Push the value directly to the chart
         datasets[5].data.push(actualThroughput);
         
-        // Store in history for reference
+        // Store in history for reference but maintain max 50 points
         if (!networkThroughputHistory[serverId]) {
             networkThroughputHistory[serverId] = [];
+        }
+        if (networkThroughputHistory[serverId].length >= 50) {
+            networkThroughputHistory[serverId].shift();
         }
         networkThroughputHistory[serverId].push(actualThroughput);
         
@@ -616,11 +666,15 @@ function updatePerformanceChart(eventData, actualThroughput) {
     }
     // Response Time (make sure it's a valid number)
     if (datasets[6] && datasets[6].data) {
+        ensureMaxPoints(datasets[6]);
         const responseValue = parseFloat(eventData.response_time || 0);
         datasets[6].data.push(responseValue);
         console.log('✅ Added Response Time to chart:', responseValue.toFixed(2), 'ms');
     }
+    
+    // System Uptime
     if (datasets[7] && datasets[7].data && eventData.system_uptime) {
+        ensureMaxPoints(datasets[7]);
         // Convert system uptime string to hours if possible
         let uptimeHours = 0;
         const uptimeString = eventData.system_uptime || '';
@@ -632,19 +686,57 @@ function updatePerformanceChart(eventData, actualThroughput) {
     }
     
     // Always keep only the latest 50 points and sort by timestamp if needed
-    labels.splice(0, labels.length - 50);
+    if (labels.length > 50) {
+        console.log(`🔄 Trimming labels from ${labels.length} to 50`);
+        labels.splice(0, labels.length - 50);
+    }
+    
+    // Perform a final check on all datasets to ensure data length consistency
     datasets.forEach(dataset => {
-        if (dataset && dataset.data && dataset.data.length > 50) {
-            dataset.data = dataset.data.slice(-50);
+        if (dataset && dataset.data) {
+            // If we have too many points, trim to exactly 50
+            if (dataset.data.length > 50) {
+                console.log(`🔄 Trimming dataset from ${dataset.data.length} to 50 points`);
+                dataset.data = dataset.data.slice(-50);
+            }
+            
+            // If by chance we have fewer points than labels, pad with null values
+            while (dataset.data.length < labels.length) {
+                dataset.data.unshift(null);
+            }
+            
+            // If we have more points than labels (shouldn't happen but just in case)
+            while (dataset.data.length > labels.length) {
+                dataset.data.shift();
+            }
         }
     });
     // Ensure labels and data are aligned and sorted by time if needed
     // (Assume labels are already in correct order since logs are reversed in backend)
     
-    // Update chart
+    // Update chart with optimized animation for real-time updates
     try {
-        chart.update('none');
-        console.log('✅ Chart updated with new data');
+        // Enhanced chart update for smoother real-time visualization
+        chart.options.animation = {
+            duration: 250,        // Fast but smooth animation
+            easing: 'easeOutQuad' // Smoother animation easing
+        };
+        
+        // Use a more responsive update mode
+        chart.update('active');   // Only animate actively changing elements
+        console.log('✅ Chart updated with enhanced real-time animation');
+        
+        // Force layout recalculation to prevent visual glitches
+        if (window.forceChartRedrawTimer) {
+            clearTimeout(window.forceChartRedrawTimer);
+        }
+        window.forceChartRedrawTimer = setTimeout(() => {
+            try {
+                chart.resize(); // Force layout recalculation
+            } catch (e) {
+                // Ignore resize errors
+            }
+        }, 100);
     } catch (error) {
         console.error('❌ Error updating chart:', error);
     }
@@ -884,3 +976,90 @@ window.serverMetrics.updateNetworkThroughput(5.5);
 console.log('🧪 Testing global metrics object:', window.serverMetrics.getNetworkThroughput());
 
 console.log('🎉 Real-time update system initialized with network throughput debugging!');
+
+// Function to optimize chart performance for real-time updates
+function optimizeChartForRealtime() {
+    if (window.performanceChart) {
+        console.log('🔧 Optimizing chart for real-time updates');
+        
+        try {
+            // Verify all datasets exist and have proper structure
+            const datasets = window.performanceChart.data.datasets;
+            const labels = window.performanceChart.data.labels;
+            
+            // Make sure we have valid arrays everywhere
+            if (!labels || !Array.isArray(labels)) {
+                window.performanceChart.data.labels = [];
+            }
+            
+            if (datasets) {
+                datasets.forEach((dataset, index) => {
+                    if (!dataset.data || !Array.isArray(dataset.data)) {
+                        dataset.data = [];
+                        console.log(`🛠️ Fixed missing data array in dataset ${index}`);
+                    }
+                });
+            }
+            
+            // Configure chart for smoother real-time updates
+            window.performanceChart.options.animation = {
+                duration: 250,       // Faster animations
+                easing: 'easeOutQuad', // Better easing for real-time
+                tension: {
+                    duration: 150,
+                    easing: 'linear',
+                    from: 0.8,
+                    to: 0.3
+                }
+            };
+            
+            // Optimize rendering with device pixel ratio
+            window.performanceChart.options.devicePixelRatio = 2;
+            
+            // Use better element positioning for real-time
+            window.performanceChart.options.responsive = true;
+            window.performanceChart.options.maintainAspectRatio = false;
+            window.performanceChart.options.resizeDelay = 100;
+            
+            // Improve tooltip response time
+            window.performanceChart.options.interaction = {
+                mode: 'nearest',
+                axis: 'x',
+                intersect: false
+            };
+            
+            // Optimize scales for real-time
+            if (window.performanceChart.options.scales) {
+                window.performanceChart.options.scales.x = {
+                    ...window.performanceChart.options.scales.x,
+                    animation: {
+                        duration: 200
+                    },
+                    ticks: {
+                        maxTicksLimit: 10
+                    }
+                };
+            }
+            
+            // Update the chart with new options
+            window.performanceChart.update();
+            console.log('🚀 Chart optimized for real-time updates');
+            
+            // Return true if optimization was successful
+            return true;
+        } catch (err) {
+            console.error('❌ Error optimizing chart:', err);
+            return false;
+        }
+    }
+    return false;
+}
+
+// Call this function when DOM is ready
+document.addEventListener('DOMContentLoaded', function() {
+    // Optimize chart for real-time if it exists
+    setTimeout(optimizeChartForRealtime, 1000);
+    
+    // Set interval to periodically optimize chart (helps with browser tab switching)
+    setInterval(optimizeChartForRealtime, 30000); // Every 30 seconds
+});
