@@ -13,29 +13,26 @@
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
         <!-- Scripts -->
-        @if(file_exists(public_path('build/manifest.json')))
-            @php
-                $manifest = json_decode(file_get_contents(public_path('build/manifest.json')), true);
-                $cssFile = $manifest['resources/css/app.css']['file'] ?? null;
-                $jsFile = $manifest['resources/js/app.js']['file'] ?? null;
-            @endphp
-            @if($cssFile)
-                <link rel="stylesheet" href="{{ asset('build/' . $cssFile) }}">
-            @endif
-            @if($jsFile)
-                <script type="module" src="{{ asset('build/' . $jsFile) }}" defer></script>
-            @endif
-        @else
+        @if(app()->environment('local'))
             @vite(['resources/css/app.css', 'resources/js/app.js'])
+        @else
+            <link rel="stylesheet" href="{{ asset('build/assets/app-BedLfyV1.css') }}">
+            <script type="module" src="{{ asset('build/assets/app-CumOnirq.js') }}"></script>
         @endif
 
+        <!--<script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>-->
+        
+        <!-- Fallback for Alpine.js if CDN fails -->
+        <!--<script>
+            if (typeof Alpine === 'undefined') {
+                document.write('<script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"><\/script>');
+            }
+        </script>-->
+        <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
         @livewireStyles
     </head>
     <body class="font-sans antialiased h-full">
-        <div class="min-h-full">
-            @include('layouts.navigation')
-        </div>
-
+        @include('layouts.navigation')        
         @livewireScripts
         @stack('scripts')
     </body>

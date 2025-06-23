@@ -85,18 +85,9 @@ class ServerController extends Controller
 
             DB::commit();
 
-            // Generate agent installation info if server was created successfully
-            $agentInstallInfo = [
-                'server_ip' => $server->ip_address,
-                'server_id' => $server->id,
-                'install_command' => $this->generateAgentInstallCommand($server),
-                'registration_endpoint' => route('api.agents.register', [], true)
-            ];
-
             return redirect()
                 ->route('servers.index')
-                ->with('success', 'Server and alert thresholds added successfully.')
-                ->with('agent_info', $agentInstallInfo);
+                ->with('success', 'Server and alert thresholds added successfully.');
 
         } catch (\Exception $e) {
             DB::rollback();
@@ -151,54 +142,5 @@ class ServerController extends Controller
 
         return redirect()->route('servers.index')
             ->with('success', 'Server deleted successfully.');
-    }
-
-    /**
-     * Generate agent installation command for the server
-     */
-    private function generateAgentInstallCommand(Server $server)
-    {
-        $serverUrl = config('app.url');
-        $installScript = "#!/bin/bash\n";
-        $installScript .= "# ServerPulse Agent Installation Script\n";
-        $installScript .= "# Server: {$server->name} ({$server->ip_address})\n\n";
-        $installScript .= "# Download and install the agent\n";
-        $installScript .= "wget https://github.com/shane-kennedy-se/serverpulse-agent/archive/main.zip\n";
-        $installScript .= "unzip main.zip\n";
-        $installScript .= "cd serverpulse-agent-main\n";
-        $installScript .= "sudo chmod +x install.sh\n";
-        $installScript .= "sudo ./install.sh\n\n";
-        $installScript .= "# Configure the agent\n";
-        $installScript .= "sudo tee /etc/serverpulse-agent/config.yml > /dev/null <<EOF\n";
-        $installScript .= "server:\n";
-        $installScript .= "  endpoint: \"{$serverUrl}\"\n";
-        $installScript .= "  auth_token: \"GENERATED_AFTER_REGISTRATION\"\n";
-        $installScript .= "  agent_id: \"GENERATED_AFTER_REGISTRATION\"\n\n";
-        $installScript .= "collection:\n";
-        $installScript .= "  interval: 30\n";
-        $installScript .= "  metrics:\n";
-        $installScript .= "    - system_stats\n";
-        $installScript .= "    - disk_usage\n";
-        $installScript .= "    - network_stats\n";
-        $installScript .= "    - process_list\n\n";
-        $installScript .= "monitoring:\n";
-        $installScript .= "  services:\n";
-        $installScript .= "    - ssh\n";
-        $installScript .= "    - nginx\n";
-        $installScript .= "    - mysql\n";
-        $installScript .= "    - docker\n\n";
-        $installScript .= "alerts:\n";
-        $installScript .= "  cpu_threshold: 80\n";
-        $installScript .= "  memory_threshold: 85\n";
-        $installScript .= "  disk_threshold: 90\n";
-        $installScript .= "  load_threshold: 5.0\n";
-        $installScript .= "EOF\n\n";
-        $installScript .= "# Start the agent service\n";
-        $installScript .= "sudo systemctl enable serverpulse-agent\n";
-        $installScript .= "sudo systemctl start serverpulse-agent\n\n";
-        $installScript .= "echo \"Agent installed! Check status with: sudo systemctl status serverpulse-agent\"\n";
-        $installScript .= "echo \"View logs with: sudo journalctl -u serverpulse-agent -f\"\n";
-
-        return $installScript;
     }
 }

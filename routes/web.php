@@ -4,8 +4,9 @@ use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ServerController;
 use App\Http\Controllers\LogController;
 use App\Http\Controllers\AnalyticsController;
-use App\Http\Controllers\API\AutoRegisterController;
+use App\Http\Controllers\DashboardController;
 use App\Http\Livewire\LogDetails;
+use App\Livewire\AlertsTable;
 use Illuminate\Support\Facades\Route;
 
 // Public agent installation routes (no auth required)
@@ -21,8 +22,8 @@ Route::get('/', function () {
 
 // Protected routes requiring authentication
 Route::middleware(['auth', 'verified'])->group(function () {
-    // Dashboard (Server List)
-    Route::get('/dashboard', [ServerController::class, 'index'])->name('dashboard');
+    // Dashboard (Livewire Component)
+    Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
     
     // Server Management Routes
     Route::resource('servers', ServerController::class);
@@ -31,6 +32,22 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
+
+
+    //Alert Route
+    Route::post('/alerts/trigger', [AlertController::class, 'trigger']);
+
+    //Test Alert Route
+    Route::get('/test-alerts', function () {
+        return view('test-alerts');
+    });
+
+
+    //Route::get('/alerts', \App\Livewire\AlertsTable::class)->name('alerts.index');
+
+    Route::get('/alerts', function () {
+        return view('alerts');
+    })->name('alerts.index');
 
     // Logs Routes
     Route::get('/logs', [LogController::class, 'index'])->name('logs.index');
@@ -41,6 +58,15 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     // Analytics Routes
     Route::get('/analytics', [AnalyticsController::class, 'index'])->name('analytics');
+
+
+    //Test
+    Route::get('/hello', function () {
+    return view('test-hello'); 
+});
+
+
+
 });
 
 require __DIR__.'/auth.php';

@@ -5,7 +5,6 @@ namespace App\Services;
 use App\Models\Server;
 use App\Models\AlertThreshold;
 use App\Models\Log; // This is your Eloquent Log model
-use App\Models\PerformanceLog;
 use phpseclib3\Net\SSH2;
 use phpseclib3\Crypt\PublicKeyLoader;
 use Exception;
@@ -39,50 +38,122 @@ class ServerMonitoringService
                     throw new Exception('SSH login failed');
                 }
 
-                $distro = strtolower(trim($ssh->exec('cat /etc/os-release | grep -w "ID" | cut -d= -f2')));
-
-                switch ($distro) {
-                    case 'ubuntu':
-                    case 'debian':
-                    case 'centos':
-                    case 'rhel':
-                        $cpu = trim($ssh->exec("top -bn1 | grep 'Cpu(s)' | awk '{print $2}'"));
-                        break;
-                    default:
-                        $cpu = trim($ssh->exec("grep 'cpu ' /proc/stat | awk '{usage=($2+$4)*100/($2+$4+$5)} END {print usage}'"));
-                }
+                // Detect OS type - simplified detection
+                $osType = 'linux';
+                $isWindows = false;
                 
-                $memInfo = $ssh->exec('free');
-                if (strpos($memInfo, 'available') !== false) {
-                    $memoryTotal = trim($ssh->exec("free | grep Mem | awk '{print $2}'"));
-                    $memoryAvailable = trim($ssh->exec("free | grep Mem | awk '{print $7}'"));
-                    $memoryUsage = ($memoryTotal > 0) ? ($memoryTotal - $memoryAvailable) / $memoryTotal * 100 : 0;
+                // Quick Windows detection
+                $powershellTest = trim($ssh->exec('powershell -Command "Write-Host \'Windows\'"'));
+                if (strpos($powershellTest, 'Windows') !== false) {
+                    $isWindows = true;
+                    $osType = 'windows';
+                }
+
+                if ($osType === 'windows') {
+                    // Optimized Windows monitoring - single PowerShell command
+                    $powershellScript = '
+$cpu = (Get-Counter -Counter "\Processor(_Total)\% Processor Time" -SampleInterval 1 -MaxSamples 1).CounterSamples.CookedValue
+$memory = (Get-Counter -Counter "\Memory\% Committed Bytes In Use" -SampleInterval 1 -MaxSamples 1).CounterSamples.CookedValue
+$disk = Get-WmiObject Win32_LogicalDisk -Filter "DeviceID=\'C:\'" | ForEach-Object { [math]::Round(($_.Size - $_.FreeSpace) / $_.Size * 100, 2) }
+$uptime = [int]((Get-Date) - (Get-CimInstance -ClassName Win32_OperatingSystem).LastBootUpTime).TotalSeconds
+$network = Get-NetAdapterStatistics | Where-Object {$_.Name -like "*Ethernet*" -or $_.Name -like "*Wi-Fi*"} | Select-Object -First 1 | ForEach-Object { $_.ReceivedBytes, $_.SentBytes -join " " }
+$diskIO = Get-Counter -Counter "\PhysicalDisk(_Total)\Disk Reads/sec","\PhysicalDisk(_Total)\Disk Writes/sec" -SampleInterval 1 -MaxSamples 1 | ForEach-Object {$_.CounterSamples | ForEach-Object {$_.CookedValue}}
+Write-Output "$cpu|$memory|$disk|$uptime|$network|$diskIO"
+';
+                    
+                    $result = trim($ssh->exec('powershell -Command "' . $powershellScript . '"'));
+                    $parts = explode('|', $result);
+                    
+                    if (count($parts) >= 6) {
+                        $cpu = trim($parts[0]);
+                        $memory = trim($parts[1]);
+                        $diskUsage = trim($parts[2]);
+                        $uptimeSeconds = floatval(trim($parts[3]));
+                        $networkStats = trim($parts[4]);
+                        $diskIO = trim($parts[5]);
+                        
+                        $systemUptime = $this->formatUptimeFromSeconds($uptimeSeconds);
+                        $memoryUsage = floatval($memory);
+                        
+                        // Parse network stats
+                        $networkParts = explode(' ', $networkStats);
+                        $rx = isset($networkParts[0]) ? (int)$networkParts[0] : 0;
+                        $tx = isset($networkParts[1]) ? (int)$networkParts[1] : 0;
+                        
+                        // Parse disk I/O
+                        $ioParts = explode("\n", $diskIO);
+                        $ioRead = isset($ioParts[0]) ? (float)$ioParts[0] * 512 : 0;
+                        $ioWrite = isset($ioParts[1]) ? (float)$ioParts[1] * 512 : 0;
+                    } else {
+                        // Fallback to individual commands if combined approach fails
+                        $cpu = trim($ssh->exec('powershell -Command "(Get-Counter -Counter \"\\Processor(_Total)\\% Processor Time\" -SampleInterval 1 -MaxSamples 1).CounterSamples.CookedValue"'));
+                        $memory = trim($ssh->exec('powershell -Command "(Get-Counter -Counter \"\\Memory\\% Committed Bytes In Use\" -SampleInterval 1 -MaxSamples 1).CounterSamples.CookedValue"'));
+                        $diskUsage = trim($ssh->exec('powershell -Command "Get-WmiObject Win32_LogicalDisk -Filter \"DeviceID=\'C:\'\" | ForEach-Object { [math]::Round(($_.Size - $_.FreeSpace) / $_.Size * 100, 2) }"'));
+                        $uptimeSeconds = floatval(trim($ssh->exec('powershell -Command "[int]((Get-Date) - (Get-CimInstance -ClassName Win32_OperatingSystem).LastBootUpTime).TotalSeconds"')));
+                        $systemUptime = $this->formatUptimeFromSeconds($uptimeSeconds);
+                        $memoryUsage = floatval($memory);
+                        
+                        // Windows network stats
+                        $networkStats = trim($ssh->exec('powershell -Command "Get-NetAdapterStatistics | Where-Object {$_.Name -like \'*Ethernet*\' -or $_.Name -like \'*Wi-Fi*\'} | Select-Object -First 1 | ForEach-Object { $_.ReceivedBytes, $_.SentBytes -join \' \' }"'));
+                        $networkParts = explode(' ', $networkStats);
+                        $rx = isset($networkParts[0]) ? (int)$networkParts[0] : 0;
+                        $tx = isset($networkParts[1]) ? (int)$networkParts[1] : 0;
+                        
+                        // Windows disk I/O
+                        $diskIO = trim($ssh->exec('powershell -Command "Get-Counter -Counter \"\\PhysicalDisk(_Total)\\Disk Reads/sec\",\"\\PhysicalDisk(_Total)\\Disk Writes/sec\" -SampleInterval 1 -MaxSamples 1 | ForEach-Object {$_.CounterSamples | ForEach-Object {$_.CookedValue}}"'));
+                        $ioParts = explode("\n", $diskIO);
+                        $ioRead = isset($ioParts[0]) ? (float)$ioParts[0] * 512 : 0;
+                        $ioWrite = isset($ioParts[1]) ? (float)$ioParts[1] * 512 : 0;
+                    }
+                    
+                    $loadAvg = 'N/A'; // Windows doesn't have load average like Linux
+                    
                 } else {
-                    $memoryTotal = trim($ssh->exec("free | grep Mem | awk '{print $2}'"));
-                    $memoryUsed = trim($ssh->exec("free | grep Mem | awk '{print $3}'"));
-                    $memoryUsage = ($memoryTotal > 0) ? ($memoryUsed / $memoryTotal) * 100 : 0;
-                }
+                    // Optimized Linux monitoring - single commands where possible
+                    $cpu = trim($ssh->exec("grep 'cpu ' /proc/stat | awk '{usage=($2+$4)*100/($2+$4+$5)} END {print usage}'"));
+                    
+                    $memInfo = $ssh->exec('free');
+                    if (strpos($memInfo, 'available') !== false) {
+                        $memoryTotal = trim($ssh->exec("free | grep Mem | awk '{print $2}'"));
+                        $memoryAvailable = trim($ssh->exec("free | grep Mem | awk '{print $7}'"));
+                        $memoryUsage = ($memoryTotal > 0) ? ($memoryTotal - $memoryAvailable) / $memoryTotal * 100 : 0;
+                    } else {
+                        $memoryTotal = trim($ssh->exec("free | grep Mem | awk '{print $2}'"));
+                        $memoryUsed = trim($ssh->exec("free | grep Mem | awk '{print $3}'"));
+                        $memoryUsage = ($memoryTotal > 0) ? ($memoryUsed / $memoryTotal) * 100 : 0;
+                    }
 
-                $diskUsage = trim($ssh->exec("df / | tail -1 | awk '{print $5}' | sed 's/%//'"));
+                    $diskUsage = trim($ssh->exec("df / | tail -1 | awk '{print $5}' | sed 's/%//'"));
+                    $uptimeSeconds = floatval(trim($ssh->exec("awk '{print $1}' /proc/uptime")));
+                    $systemUptime = $this->formatUptimeFromSeconds($uptimeSeconds);
+                    $loadAvg = trim($ssh->exec("uptime | awk -F'load average:' '{print $2}'"));
 
-                $uptimeSeconds = floatval(trim($ssh->exec("awk '{print $1}' /proc/uptime")));
-                $systemUptime = $this->formatUptimeFromSeconds($uptimeSeconds);
-                $loadAvg = trim($ssh->exec("uptime | awk -F'load average:' '{print $2}'"));
+                    // Network traffic - optimized
+                    $defaultInterface = trim($ssh->exec("ip route | grep default | awk '{print $5}'"));
+                    if (empty($defaultInterface)) {
+                        $defaultInterface = 'eth0';
+                    }
+                    
+                    $netDev = $ssh->exec('cat /proc/net/dev');
+                    $lines = explode("\n", $netDev);
+                    foreach ($lines as $line) {
+                        if (strpos($line, $defaultInterface . ':') !== false) {
+                            $parts = preg_split('/\s+/', trim($line));
+                            $rx = (int)$parts[1];
+                            $tx = (int)$parts[9];
+                            break;
+                        }
+                    }
 
-                // Network traffic - dynamically find the default interface
-                $defaultInterface = trim($ssh->exec("ip route | grep default | awk '{print $5}'"));
-                if (empty($defaultInterface)) {
-                    $defaultInterface = 'eth0'; // Fallback
-                }
-                
-                $netDev = $ssh->exec('cat /proc/net/dev');
-                $lines = explode("\n", $netDev);
-                foreach ($lines as $line) {
-                    if (strpos($line, $defaultInterface . ':') !== false) {
-                        $parts = preg_split('/\s+/', trim($line));
-                        $rx = (int)$parts[1];
-                        $tx = (int)$parts[9];
-                        break;
+                    // Disk I/O - optimized
+                    $diskStats = $ssh->exec('cat /proc/diskstats');
+                    $lines = explode("\n", $diskStats);
+                    foreach ($lines as $line) {
+                        if (preg_match('/(sd|vd|nvme[0-9]n[0-9]|vda|vdb|vdc|vdd|vde|vdf|vdg|vdh|vdi|vdj|vdk|vdl|vdm|vdn|vdo|vdp|vdq|vdr|vds|vdt|vdu|vdv|vdw|vdx|vdy|vdz)\s/i', $line)) {
+                            $parts = preg_split('/\s+/', trim($line));
+                            $ioRead += (int)$parts[5] * 512;
+                            $ioWrite += (int)$parts[9] * 512;
+                        }
                     }
                 }
 
@@ -90,38 +161,15 @@ class ServerMonitoringService
                 $previousRx = $server->network_rx ?? 0;
                 $previousTx = $server->network_tx ?? 0;
                 
-                // If new values are less than previous, it means counters reset
                 if ($rx < $previousRx || $tx < $previousTx) {
                     $rx = 0;
                     $tx = 0;
-                }
-                
-                // Startup spike detection: if this is the first measurement after being offline
-                // and there's a huge jump in network activity, smooth it out
-                if ($server->status === 'offline' && ($rx > 0 || $tx > 0)) {
-                    // Server just came online, limit initial network activity
-                    $rx = min($rx, 1000000); // Cap at 1MB
-                    $tx = min($tx, 1000000); // Cap at 1MB
-                }
-
-                // Disk I/O
-                $diskStats = $ssh->exec('cat /proc/diskstats');
-                $lines = explode("\n", $diskStats);
-                foreach ($lines as $line) {
-                    // Look for common disk names like sda, vda, nvme0n1
-                    if (preg_match('/(sd|vd|nvme[0-9]n[0-9]|vda|vdb|vdc|vdd|vde|vdf|vdg|vdh|vdi|vdj|vdk|vdl|vdm|vdn|vdo|vdp|vdq|vdr|vds|vdt|vdu|vdv|vdw|vdx|vdy|vdz)\s/i', $line)) {
-                        $parts = preg_split('/\s+/', trim($line));
-                        $ioRead += (int)$parts[5] * 512; // sectors read to bytes
-                        $ioWrite += (int)$parts[9] * 512; // sectors written to bytes
-                        // We will sum all primary disks, but you could configure a specific one
-                    }
                 }
 
                 // Handle disk I/O counter reset (server restart/offline)
                 $previousRead = $server->disk_io_read ?? 0;
                 $previousWrite = $server->disk_io_write ?? 0;
                 
-                // If new values are less than previous, it means counters reset
                 if ($ioRead < $previousRead || $ioWrite < $previousWrite) {
                     $ioRead = 0;
                     $ioWrite = 0;
@@ -149,7 +197,6 @@ class ServerMonitoringService
                     $server->status = 'online';
                     $server->save();
                 }
-                // This is the key part - exactly like downtime calculation
                 $metrics['current_uptime'] = $server->running_since ? now()->diffInSeconds($server->running_since) : null;
             } else {
                 if ($wasOnline || !$server->last_down_at) {
@@ -158,7 +205,6 @@ class ServerMonitoringService
                     $server->status = 'offline';
                     $server->save();
                 }
-                // This is the working downtime calculation - don't touch it
                 $metrics['current_downtime'] = $server->last_down_at ? now()->diffInSeconds($server->last_down_at) : null;
             }
 
@@ -171,17 +217,13 @@ class ServerMonitoringService
                 $metrics['formatted_downtime'] = $this->formatUptimeFromSeconds($metrics['current_downtime'] ?? 0);
             }
 
-            // Calculate simple network health metrics (more reliable than speed)
+            // Calculate simple network health metrics
             $metrics['network_health'] = 'unknown';
             $metrics['ping_response'] = 0;
             $metrics['network_activity'] = 'low';
-            $metrics['response_time'] = 0;
             
-            // Measure response time and network health
+            // Simple ping test for network health
             try {
-                $responseTime = $this->measureResponseTime($server->ip_address);
-                $metrics['response_time'] = $responseTime;
-                
                 if ($this->isLocalhost($server->ip_address)) {
                     $metrics['network_health'] = 'excellent';
                     $metrics['ping_response'] = 1;
@@ -199,7 +241,6 @@ class ServerMonitoringService
             } catch (Exception $e) {
                 $metrics['network_health'] = 'unknown';
                 $metrics['ping_response'] = 0;
-                $metrics['response_time'] = 999.9;
             }
             
             // Determine network activity level based on recent transfers
@@ -208,9 +249,9 @@ class ServerMonitoringService
                 $txDiff = $metrics['network_tx'] - $server->network_tx;
                 $totalDiff = $rxDiff + $txDiff;
                 
-                if ($totalDiff > 1000000) { // > 1MB
+                if ($totalDiff > 1000000) {
                     $metrics['network_activity'] = 'high';
-                } elseif ($totalDiff > 100000) { // > 100KB
+                } elseif ($totalDiff > 100000) {
                     $metrics['network_activity'] = 'medium';
                 } else {
                     $metrics['network_activity'] = 'low';
@@ -222,7 +263,6 @@ class ServerMonitoringService
 
             return $metrics;
         } catch (Exception $e) {
-            // Leave the catch block exactly as is - it works
             $wasOnline = $server->status === 'online';
             
             if ($wasOnline || !$server->last_down_at) {
@@ -259,22 +299,18 @@ class ServerMonitoringService
         }
         // Windows metrics collection
         try {
-            // Windows metrics with system uptime
             $cpu = shell_exec('powershell "(Get-Counter -Counter \"\\Processor(_Total)\\% Processor Time\" -SampleInterval 1 -MaxSamples 1).CounterSamples.CookedValue"');
             $memory = shell_exec('powershell "(Get-Counter -Counter \"\\Memory\\% Committed Bytes In Use\" -SampleInterval 1 -MaxSamples 1).CounterSamples.CookedValue"');
-            $disk = shell_exec('powershell "Get-WmiObject Win32_LogicalDisk -Filter \"DeviceID=\'C:\'\" | ForEach-Object { ($_.Size - $_.FreeSpace) / $_.Size * 100 }"');
+            $diskUsage = shell_exec('powershell "Get-WmiObject Win32_LogicalDisk -Filter \"DeviceID=\'C:\'\" | ForEach-Object { ($_.Size - $_.FreeSpace) / $_.Size * 100 }"');
             
-            // Final robust uptime calculation for Windows that returns total seconds as an integer
             $uptimeCmd = 'powershell "[int]((Get-Date) - (Get-CimInstance -ClassName Win32_OperatingSystem).LastBootUpTime).TotalSeconds"';
             $uptimeSeconds = floatval(trim(shell_exec($uptimeCmd)));
             $systemUptime = $this->formatUptimeFromSeconds($uptimeSeconds);
 
-            // Network traffic for Windows is more complex and might require more specific commands.
-            // For now, returning 0.
             return [
                 'cpu_usage' => floatval(trim($cpu)),
                 'ram_usage' => floatval(trim($memory)),
-                'disk_usage' => floatval(trim($disk)),
+                'disk_usage' => floatval(trim($diskUsage)),
                 'system_uptime' => $systemUptime,
                 'status' => 'online',
                 'network_rx' => 0,
@@ -298,13 +334,10 @@ class ServerMonitoringService
             ];
             
             if ($server) {
-                // Handle downtime tracking for failed localhost
                 $wasOnline = $server->status === 'online';
                 
                 if ($wasOnline || !$server->last_down_at) {
-                    // Server just went offline
                     if ($wasOnline === true && $server->running_since) {
-                        // Calculate uptime that just ended
                         $uptimeDuration = now()->diffInSeconds($server->running_since);
                         $server->total_uptime_seconds += $uptimeDuration;
                     }
@@ -324,7 +357,7 @@ class ServerMonitoringService
     }
 
     /**
-     * Get metrics for Linux localhost
+     * Get metrics for Linux localhost - optimized without delays
      */
     private function getLinuxLocalMetrics(Server $server = null)
     {
@@ -334,10 +367,9 @@ class ServerMonitoringService
         $uptime = '';
         $loadAvg = '';
 
-        // CPU Usage
+        // CPU Usage - optimized without delay
         if (file_exists('/proc/stat')) {
             $stat1 = file_get_contents('/proc/stat');
-            usleep(100000); // 100ms
             $stat2 = file_get_contents('/proc/stat');
             $cpu1 = preg_split('/\s+/', explode("\n", $stat1)[0]);
             $cpu2 = preg_split('/\s+/', explode("\n", $stat2)[0]);
@@ -357,7 +389,6 @@ class ServerMonitoringService
         if ($cpuUsage === 0) {
             $load = sys_getloadavg();
             if ($load && is_array($load)) {
-                // This is not percent, but gives an idea (1-min load average)
                 $cpuUsage = $load[0];
             }
         }
@@ -404,10 +435,10 @@ class ServerMonitoringService
             $loadAvg = trim(file_get_contents('/proc/loadavg'));
         }
 
-        // Network traffic for local Linux - dynamically find the default interface
+        // Network traffic for local Linux - optimized
         $defaultInterface = trim(shell_exec("ip route | grep default | awk '{print $5}'"));
         if (empty($defaultInterface)) {
-            $defaultInterface = 'eth0'; // Fallback
+            $defaultInterface = 'eth0';
         }
         $netDev = file_get_contents('/proc/net/dev');
         $lines = explode("\n", $netDev);
@@ -427,28 +458,19 @@ class ServerMonitoringService
             $previousRx = $server->network_rx ?? 0;
             $previousTx = $server->network_tx ?? 0;
             
-            // If new values are less than previous, it means counters reset
             if ($rx < $previousRx || $tx < $previousTx) {
                 $rx = 0;
                 $tx = 0;
             }
-            
-            // Startup spike detection: if this is the first measurement after being offline
-            // and there's a huge jump in network activity, smooth it out
-            if ($server->status === 'offline' && ($rx > 0 || $tx > 0)) {
-                // Server just came online, limit initial network activity
-                $rx = min($rx, 1000000); // Cap at 1MB
-                $tx = min($tx, 1000000); // Cap at 1MB
-            }
         }
 
-        // Disk I/O for local Linux
+        // Disk I/O for local Linux - optimized
         $diskStats = file_get_contents('/proc/diskstats');
         $lines = explode("\n", $diskStats);
         $ioRead = 0;
         $ioWrite = 0;
         foreach ($lines as $line) {
-            if (preg_match('/(sd|vd|nvme[0-9]n[0-9]|vda|vdb|vdc|vdd|vde|vdf|vdg|vdh|vdi|vdj|vdk|vdl|vdm|vdn|vdo|vdp|vdq|vdr|vds|vdt|vdu|vdv|vdw|vdx|vdy|vdz)\s/i', $line)) {
+            if (preg_match('/(sd|vd|nvme[0-9]n[0-9])\s/i', $line)) {
                 $parts = preg_split('/\s+/', trim($line));
                 $ioRead += (int)$parts[5] * 512;
                 $ioWrite += (int)$parts[9] * 512;
@@ -460,7 +482,6 @@ class ServerMonitoringService
             $previousRead = $server->disk_io_read ?? 0;
             $previousWrite = $server->disk_io_write ?? 0;
             
-            // If new values are less than previous, it means counters reset
             if ($ioRead < $previousRead || $ioWrite < $previousWrite) {
                 $ioRead = 0;
                 $ioWrite = 0;
@@ -476,7 +497,7 @@ class ServerMonitoringService
             'load_average' => $loadAvg,
             'network_rx' => $rx,
             'network_tx' => $tx,
-            'network_speed' => 0, // Speed calculation will be handled in the main getMetrics function
+            'network_speed' => 0,
             'disk_io_read' => $ioRead,
             'disk_io_write' => $ioWrite,
         ];
@@ -573,11 +594,11 @@ class ServerMonitoringService
     {
         $exceedPercentage = ($currentValue - $thresholdValue) / $thresholdValue * 100;
         
-        if ($exceedPercentage >= 50) { // 50% over threshold
+        if ($exceedPercentage >= 50) {
             return 'critical';
-        } elseif ($exceedPercentage >= 25) { // 25% over threshold
+        } elseif ($exceedPercentage >= 25) {
             return 'error';
-        } elseif ($exceedPercentage >= 10) { // 10% over threshold
+        } elseif ($exceedPercentage >= 10) {
             return 'warning';
         } else {
             return 'notice';
@@ -619,20 +640,19 @@ class ServerMonitoringService
     }
 
     /**
-     * Measure response time in milliseconds using curl
+     * Measure response time in milliseconds using curl - optimized
      */
     private function measureResponseTime($ipAddress): float
     {
         try {
             if ($this->isLocalhost($ipAddress)) {
-                // For localhost, return a very low response time
                 return 0.1;
             }
 
-            // Use curl to measure response time
+            // Optimized response time measurement
             $startTime = microtime(true);
             
-            // Try to connect to the server on port 22 (SSH) or port 80 (HTTP)
+            // Try to connect to the server on common ports
             $ports = [22, 80, 443];
             $responseTime = 999.9;
             
@@ -641,95 +661,15 @@ class ServerMonitoringService
                 $result = shell_exec($curlCmd);
                 
                 if ($result && is_numeric($result)) {
-                    $responseTime = (float)$result * 1000; // Convert to milliseconds
-                    break; // Use the first successful connection
-                }
-            }
-            
-            // If curl fails, try a simple TCP connection test
-            if ($responseTime >= 999.9) {
-                $curlCmd = "curl -s -o /dev/null -w '%{time_total}' --connect-timeout 1 --max-time 2 telnet://{$ipAddress}:22 2>/dev/null";
-                $result = shell_exec($curlCmd);
-                
-                if ($result && is_numeric($result)) {
-                    $responseTime = (float)$result * 1000; // Convert to milliseconds
+                    $responseTime = (float)$result * 1000;
+                    break;
                 }
             }
             
             return $responseTime;
             
         } catch (Exception $e) {
-            return 999.9; // Error occurred
-        }
-    }
-
-    /**
-     * Process agent metrics and create performance log entry
-     */
-    public function processAgentMetrics(Server $server, array $metrics)
-    {
-        try {
-            // Create performance log entry
-            PerformanceLog::create([
-                'server_id' => $server->id,
-                'cpu_usage' => $metrics['cpu_usage'] ?? null,
-                'ram_usage' => $metrics['memory_usage'] ?? null,
-                'disk_usage' => $metrics['disk_usage'] ?? null,
-                'network_rx' => $metrics['network_rx'] ?? 0,
-                'network_tx' => $metrics['network_tx'] ?? 0,
-                'disk_io_read' => $metrics['disk_io_read'] ?? 0,
-                'disk_io_write' => $metrics['disk_io_write'] ?? 0,
-                'response_time' => $metrics['response_time'] ?? null,
-            ]);
-
-            return true;
-        } catch (Exception $e) {
-            \Log::error('Failed to create performance log: ' . $e->getMessage());
-            return false;
-        }
-    }
-
-    /**
-     * Check alerts for agent-provided metrics
-     */
-    public function checkAlerts(Server $server, array $metrics)
-    {
-        $thresholds = AlertThreshold::where('server_id', $server->id)->get();
-        
-        foreach ($thresholds as $threshold) {
-            $currentValue = null;
-            $metricName = '';
-            
-            switch (strtoupper($threshold->metric_type)) {
-                case 'CPU':
-                    $currentValue = $metrics['cpu_usage'] ?? 0;
-                    $metricName = 'CPU';
-                    break;
-                case 'RAM':
-                case 'MEMORY':
-                    $currentValue = $metrics['memory_usage'] ?? 0;
-                    $metricName = 'Memory';
-                    break;
-                case 'DISK':
-                    $currentValue = $metrics['disk_usage'] ?? 0;
-                    $metricName = 'Disk';
-                    break;
-                case 'LOAD':
-                    $currentValue = $metrics['load_average'] ?? 0;
-                    $metricName = 'Load Average';
-                    break;
-            }
-            
-            if ($currentValue !== null && $currentValue > $threshold->threshold_value) {
-                // Create alert log
-                Log::create([
-                    'server_id' => $server->id,
-                    'level' => $currentValue > ($threshold->threshold_value * 1.2) ? 'error' : 'warning',
-                    'log_level' => $currentValue > ($threshold->threshold_value * 1.2) ? 'ERROR' : 'WARNING',
-                    'message' => "{$metricName} usage ({$currentValue}%) exceeded threshold ({$threshold->threshold_value}%)",
-                    'source' => 'agent_alert'
-                ]);
-            }
+            return 999.9;
         }
     }
 }

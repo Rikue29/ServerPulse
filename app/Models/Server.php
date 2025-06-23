@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Server extends Model
 {
@@ -34,14 +35,11 @@ class Server extends Model
         'ssh_key',
         'ssh_port',
         'system_uptime',
-        'agent_enabled',
-        'agent_id',
-        'agent_token',
-        'agent_last_heartbeat',
-        'agent_status',
-        'agent_version',
-        'agent_config',
-        'last_metrics'
+        'network_rx',
+        'network_tx',
+        'disk_io_read',
+        'disk_io_write',
+        'network_speed'
     ];
 
     /**
@@ -59,10 +57,11 @@ class Server extends Model
         'running_since' => 'datetime',
         'total_uptime_seconds' => 'integer',
         'total_downtime_seconds' => 'integer',
-        'agent_enabled' => 'boolean',
-        'agent_last_heartbeat' => 'datetime',
-        'agent_config' => 'array',
-        'last_metrics' => 'array'
+        'network_rx' => 'integer',
+        'network_tx' => 'integer',
+        'disk_io_read' => 'integer',
+        'disk_io_write' => 'integer',
+        'network_speed' => 'integer'
     ];
 
     /**
@@ -73,10 +72,25 @@ class Server extends Model
         return $this->belongsTo(User::class, 'created_by');
     }
 
+    /**
+     * Get the logs for the server.
+     */
+    public function logs(): HasMany
+    {
+        return $this->hasMany(Log::class);
+    }
+
+    /**
+     * Get the alert thresholds for the server.
+     */
+    public function alertThresholds(): HasMany
+    {
+        return $this->hasMany(AlertThreshold::class);
+    }
+
     protected $hidden = [
         'ssh_password',
-        'ssh_key',
-        'agent_token'
+        'ssh_key'
     ];
 
     /**

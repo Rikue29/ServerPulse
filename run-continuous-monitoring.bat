@@ -20,5 +20,5 @@ if errorlevel 1 (
     echo Monitoring completed successfully
 )
 echo.
-timeout /t 30 /nobreak >nul
+timeout /t 2 /nobreak >nul
 goto loop
