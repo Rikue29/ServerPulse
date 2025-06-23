@@ -6,6 +6,8 @@ use Illuminate\Support\ServiceProvider;
 use Livewire\Livewire;
 use App\Livewire\LogsTable;
 use App\Livewire\Dashboard;
+use Illuminate\Support\Facades\View;
+use App\Models\Alert;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -24,5 +26,8 @@ class AppServiceProvider extends ServiceProvider
     {
         Livewire::component('logs-table', LogsTable::class);
         Livewire::component('dashboard', Dashboard::class);
+        View::composer('layouts.app', function ($view) {
+        $view->with('recentAlerts', Alert::latest()->take(5)->get());
+    });
     }
 }

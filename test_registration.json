@@ -1,0 +1,10 @@
+{
+    "server_ip": "192.168.0.102",
+    "hostname": "test-hostname",
+    "agent_version": "1.0.0",
+    "system_info": {
+        "os": "linux",
+        "cpu_cores": 2,
+        "memory_gb": 4
+    }
+}

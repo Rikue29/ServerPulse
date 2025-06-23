@@ -20,12 +20,23 @@
             <script type="module" src="{{ asset('build/assets/app-CumOnirq.js') }}"></script>
         @endif
 
-        <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
-
+        <!--<script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>-->
+        
+        <!-- Fallback for Alpine.js if CDN fails -->
+        <!--<script>
+            if (typeof Alpine === 'undefined') {
+                document.write('<script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"><\/script>');
+            }
+        </script>-->
+        <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
         @livewireStyles
     </head>
     <body class="font-sans antialiased h-full">
         @include('layouts.navigation')
+
+        <main class="p-6">
+            @yield('content')
+        </main>
 
         @livewireScripts
         @stack('scripts')

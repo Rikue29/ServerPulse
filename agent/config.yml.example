@@ -1,0 +1,32 @@
+server:
+  endpoint: "http://serverpulse.test:8080"
+  auth_token: "WILL_BE_GENERATED_AFTER_REGISTRATION"
+  agent_id: "WILL_BE_GENERATED_AFTER_REGISTRATION"
+
+collection:
+  interval: 30  # Data collection interval in seconds
+  metrics:
+    - system_stats
+    - disk_usage
+    - network_stats
+    - process_list
+
+monitoring:
+  services:
+    - ssh
+    - nginx
+    - apache2
+    - mysql
+    - docker
+    - postgresql
+    - systemd
+
+alerts:
+  cpu_threshold: 80      # CPU usage percentage
+  memory_threshold: 85   # Memory usage percentage
+  disk_threshold: 90     # Disk usage percentage
+  load_threshold: 5.0    # System load average
+
+logging:
+  level: INFO
+  file: /var/log/serverpulse-agent/agent.log

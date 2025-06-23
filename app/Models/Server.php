@@ -34,7 +34,12 @@ class Server extends Model
         'ssh_password',
         'ssh_key',
         'ssh_port',
-        'system_uptime'
+        'system_uptime',
+        'network_rx',
+        'network_tx',
+        'disk_io_read',
+        'disk_io_write',
+        'network_speed'
     ];
 
     /**
@@ -51,7 +56,12 @@ class Server extends Model
         'last_down_at' => 'datetime',
         'running_since' => 'datetime',
         'total_uptime_seconds' => 'integer',
-        'total_downtime_seconds' => 'integer'
+        'total_downtime_seconds' => 'integer',
+        'network_rx' => 'integer',
+        'network_tx' => 'integer',
+        'disk_io_read' => 'integer',
+        'disk_io_write' => 'integer',
+        'network_speed' => 'integer'
     ];
 
     /**
