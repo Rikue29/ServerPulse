@@ -33,11 +33,7 @@
     </head>
     <body class="font-sans antialiased h-full">
         @include('layouts.navigation')
-
-        <main class="p-6">
-            @yield('content')
-        </main>
-
+        
         @livewireScripts
         @stack('scripts')
     </body>
