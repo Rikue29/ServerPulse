@@ -25,11 +25,6 @@ class AnalyticsController extends Controller
             'current_network_activity' => 0, // Will be updated below
             'storage_usage' => $selected_server->disk_usage ?? 0,
             'resource_allocation' => $selected_server->ram_usage ?? 0,
-            'system_uptime' => $selected_server->status === 'online' && $selected_server->running_since 
-                ? \Carbon\CarbonInterval::seconds(now()->diffInSeconds($selected_server->running_since))->cascade()->forHumans(['short' => true])
-                : ($selected_server->status === 'offline' && $selected_server->last_down_at 
-                    ? \Carbon\CarbonInterval::seconds(now()->diffInSeconds($selected_server->last_down_at))->cascade()->forHumans(['short' => true])
-                    : '0s'),
         ];
 
         // For the graph, we'll get the last 24 hours of performance logs for a specific server
@@ -41,13 +36,14 @@ class AnalyticsController extends Controller
             'disk_io' => [],
             'disk_usage' => [],
             'response_time' => [],
+            'system_uptime' => [],
             'network_throughput' => [],
         ];
 
         if ($selected_server_id) {
-            // Get the most recent performance logs by ID to ensure we get the latest data
+            // Get the most recent performance logs by created_at to ensure we get the latest data
             $performanceLogs = PerformanceLog::where('server_id', $selected_server_id)
-                       ->orderBy('id', 'desc')
+                       ->orderBy('created_at', 'desc')
                        ->limit(100) // Limit to most recent 100 logs
                        ->get()
                        ->reverse(); // Reverse to get chronological order for the graph
@@ -55,15 +51,12 @@ class AnalyticsController extends Controller
             $last_log = null;
 
             foreach ($performanceLogs as $log) {
-                // Ensure the log timestamp is in Asia/Kuala_Lumpur timezone
+                // Use the actual log timestamp in 'H:i:s' format for the X-axis
                 $logTime = $log->created_at->setTimezone('Asia/Kuala_Lumpur');
-                $chart_data['labels'][] = $logTime->format('H:i');
+                $chart_data['labels'][] = $logTime->format('H:i:s');
                 $chart_data['cpu_load'][] = $log->cpu_usage ?? 0;
                 $chart_data['memory_usage'][] = $log->ram_usage ?? 0;
                 $chart_data['disk_usage'][] = $log->disk_usage ?? 0;
-                
-                // For response time, only use logs with actual response time measurements
-                $chart_data['response_time'][] = ($log->response_time && $log->response_time > 0) ? $log->response_time : 0;
                 
                 // Calculate network activity level (0-100 scale)
                 if (isset($last_log)) {
@@ -120,6 +113,20 @@ class AnalyticsController extends Controller
                     $chart_data['network_throughput'][] = 0;
                 }
                 
+                // Add response time from logs if available, otherwise use 0
+                $chart_data['response_time'][] = $log->response_time ?? 0;
+                
+                // Convert system uptime string to hours if possible
+                $uptimeHours = 0;
+                if ($log->system_uptime) {
+                    // Attempt to parse uptime string (e.g. "18h 2m 13s")
+                    preg_match('/(\d+)h\s+(\d+)m\s+(\d+)s/', $log->system_uptime, $matches);
+                    if (count($matches) >= 4) {
+                        $uptimeHours = intval($matches[1]) + (intval($matches[2]) / 60) + (intval($matches[3]) / 3600);
+                    }
+                }
+                $chart_data['system_uptime'][] = $uptimeHours;
+                
                 $last_log = $log;
             }
             
@@ -136,7 +143,6 @@ class AnalyticsController extends Controller
             'chart_data' => $chart_data,
             'servers' => $servers,
             'selected_server_id' => $selected_server_id,
-            'selected_server' => $selected_server,
             'network_health_summary' => $network_health_summary
         ]);
     }

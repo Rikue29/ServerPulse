@@ -121,31 +121,19 @@
             <!-- System Uptime -->
             <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
                 <div class="flex items-center justify-between">
-                    <h3 class="text-sm font-medium text-gray-500">
-                        @if($selected_server->status === 'online')
-                            System Uptime
-                        @else
-                            System Downtime
-                        @endif
-                    </h3>
-                    <i class="fas fa-server text-{{ $selected_server->status === 'online' ? 'blue' : 'red' }}-500"></i>
+                    <h3 class="text-sm font-medium text-gray-500">System Uptime</h3>
+                    <i class="fas fa-server text-blue-500"></i>
                 </div>
                 <div class="mt-4">
-                    <span class="text-3xl font-bold text-{{ $selected_server->status === 'online' ? 'gray' : 'red' }}-900">
-                        @if($selected_server->status === 'online')
-                            {{ $summary['system_uptime'] }}
+                    <span class="text-3xl font-bold text-gray-900">
+                        @if(!empty($chart_data['system_uptime']))
+                            {{ number_format(end($chart_data['system_uptime']), 1) }}
                         @else
-                            {{ $selected_server->current_downtime_formatted ?? 'N/A' }}
+                            0
                         @endif
                     </span>
                 </div>
-                <p class="text-xs text-gray-500 mt-1">
-                    @if($selected_server->status === 'online')
-                        Current Uptime
-                    @else
-                        Current Downtime
-                    @endif
-                </p>
+                <p class="text-xs text-gray-500 mt-1">hours</p>
             </div>
         </div>
 
@@ -177,24 +165,24 @@
                             <input type="checkbox" id="memoryToggle" class="form-checkbox h-4 w-4 text-purple-600" checked>
                             <span class="ml-2 text-gray-700">Memory Usage</span>
                         </label>
-                         <label class="flex items-center">
+                        <label class="flex items-center">
                             <input type="checkbox" id="networkToggle" class="form-checkbox h-4 w-4 text-green-600" checked>
                             <span class="ml-2 text-gray-700">Network Activity</span>
                         </label>
                         <label class="flex items-center">
-                            <input type="checkbox" id="diskToggle" class="form-checkbox h-4 w-4 text-orange-600">
+                            <input type="checkbox" id="diskToggle" class="form-checkbox h-4 w-4 text-orange-600" checked>
                             <span class="ml-2 text-gray-700">Disk I/O (MB/s)</span>
                         </label>
                         <label class="flex items-center">
-                            <input type="checkbox" id="diskUsageToggle" class="form-checkbox h-4 w-4 text-purple-600">
+                            <input type="checkbox" id="diskUsageToggle" class="form-checkbox h-4 w-4 text-purple-600" checked>
                             <span class="ml-2 text-gray-700">Disk Usage (%)</span>
                         </label>
                         <label class="flex items-center">
-                            <input type="checkbox" id="networkThroughputToggle" class="form-checkbox h-4 w-4 text-pink-600">
+                            <input type="checkbox" id="networkThroughputToggle" class="form-checkbox h-4 w-4 text-pink-600" checked>
                             <span class="ml-2 text-gray-700">Network Throughput (KB/s)</span>
                         </label>
                         <label class="flex items-center">
-                            <input type="checkbox" id="responseTimeToggle" class="form-checkbox h-4 w-4 text-rose-600">
+                            <input type="checkbox" id="responseTimeToggle" class="form-checkbox h-4 w-4 text-green-600" checked>
                             <span class="ml-2 text-gray-700">Response Time (ms)</span>
                         </label>
                     </div>
@@ -211,8 +199,37 @@
         document.addEventListener('DOMContentLoaded', function () {
             const ctx = document.getElementById('performanceChart').getContext('2d');
             const chartData = @json($chart_data);
+            const serverId = document.getElementById('server_id') ? document.getElementById('server_id').value : null;
 
-            const performanceChart = new Chart(ctx, {
+            // Utility for localStorage graph state (per-server)
+            function getActiveGraphKey(serverId) {
+                return `serverpulse_active_graphs_${serverId}`;
+            }
+            function saveActiveGraphs(serverId, activeIds) {
+                if (serverId && activeIds) {
+                    localStorage.setItem(getActiveGraphKey(serverId), JSON.stringify(activeIds));
+                    console.log('✅ Saved active graphs:', activeIds);
+                }
+            }
+            function loadActiveGraphs(serverId) {
+                if (serverId) {
+                    const val = localStorage.getItem(getActiveGraphKey(serverId));
+                    if (val) {
+                        try {
+                            const parsed = JSON.parse(val);
+                            console.log('📊 Loaded active graphs:', parsed);
+                            return parsed;
+                        } catch (e) {
+                            console.error('❌ Error parsing active graphs:', e);
+                            return null;
+                        }
+                    }
+                }
+                return null;
+            }
+
+            // Create chart and assign it to window so it can be accessed by the WebSocket event handler
+            window.performanceChart = new Chart(ctx, {
                 type: 'line',
                 data: {
                     labels: chartData.labels,
@@ -224,7 +241,8 @@
                             backgroundColor: 'rgba(59, 130, 246, 0.2)',
                             borderWidth: 2,
                             pointRadius: 0,
-                            tension: 0.4
+                            tension: 0.4,
+                            hidden: false
                         },
                         {
                             label: 'Memory Usage',
@@ -233,7 +251,8 @@
                             backgroundColor: 'rgba(139, 92, 246, 0.2)',
                             borderWidth: 2,
                             pointRadius: 0,
-                            tension: 0.4
+                            tension: 0.4,
+                            hidden: false
                         },
                         {
                             label: 'Network Activity',
@@ -242,7 +261,8 @@
                             backgroundColor: 'rgba(16, 185, 129, 0.2)',
                             borderWidth: 2,
                             pointRadius: 0,
-                            tension: 0.4
+                            tension: 0.4,
+                            hidden: false
                         },
                         {
                             label: 'Disk I/O',
@@ -252,7 +272,7 @@
                             borderWidth: 2,
                             pointRadius: 0,
                             tension: 0.4,
-                            hidden: true
+                            hidden: false
                         },
                         {
                             label: 'Disk Usage',
@@ -262,7 +282,7 @@
                             borderWidth: 2,
                             pointRadius: 0,
                             tension: 0.4,
-                            hidden: true
+                            hidden: false
                         },
                         {
                             label: 'Network Throughput',
@@ -272,23 +292,47 @@
                             borderWidth: 2,
                             pointRadius: 0,
                             tension: 0.4,
-                            hidden: true
+                            hidden: false
                         },
                         {
                             label: 'Response Time',
                             data: chartData.response_time,
-                            borderColor: 'rgba(220, 38, 127, 1)',
-                            backgroundColor: 'rgba(220, 38, 127, 0.2)',
+                            borderColor: 'rgba(34, 197, 94, 1)',
+                            backgroundColor: 'rgba(34, 197, 94, 0.2)',
                             borderWidth: 2,
                             pointRadius: 0,
                             tension: 0.4,
-                            hidden: true
+                            hidden: false
                         }
                     ]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: true,
+                    // Add smooth transition animations
+                    animation: {
+                        duration: 600,
+                        easing: 'easeOutQuad',
+                        mode: 'active'
+                    },
+                    transitions: {
+                        show: {
+                            animations: {
+                                properties: ['opacity'],
+                                from: 0,
+                                to: 1,
+                                duration: 600
+                            }
+                        },
+                        hide: {
+                            animations: {
+                                properties: ['opacity'],
+                                from: 1,
+                                to: 0,
+                                duration: 400
+                            }
+                        }
+                    },
                     scales: {
                         y: {
                             beginAtZero: true,
@@ -299,6 +343,10 @@
                                     }
                                     return value;
                                 }
+                            },
+                            // Add animation for scales too
+                            animation: {
+                                duration: 500
                             }
                         }
                     },
@@ -319,22 +367,92 @@
                 }
             });
 
-            function toggleDataset(id, chart) {
-                const isVisible = chart.isDatasetVisible(id);
-                if (isVisible) {
-                    chart.hide(id);
-                } else {
-                    chart.show(id);
+            // --- Define toggle mapping between checkbox IDs and dataset indices ---
+            const toggleMapping = {
+                'cpuToggle': 0,
+                'memoryToggle': 1, 
+                'networkToggle': 2, 
+                'diskToggle': 3,
+                'diskUsageToggle': 4, 
+                'networkThroughputToggle': 5, 
+                'responseTimeToggle': 6
+            };
+
+            const toggleIds = Object.keys(toggleMapping);
+            const chart = window.performanceChart;
+
+            // Function to synchronize checkbox state with chart visibility
+            function syncCheckboxWithChart(toggleId) {
+                const checkbox = document.getElementById(toggleId);
+                const datasetIndex = toggleMapping[toggleId];
+                
+                if (!checkbox || datasetIndex === undefined) return;
+                
+                // Ensure dataset at index exists
+                if (!chart.data.datasets[datasetIndex]) {
+                    console.error(`❌ Dataset at index ${datasetIndex} does not exist`);
+                    return;
                 }
+
+                // Set dataset visibility based on checkbox, respecting current state
+                const wasHidden = chart.data.datasets[datasetIndex].hidden;
+                const shouldShow = checkbox.checked;
+                
+                if (shouldShow) {
+                    chart.data.datasets[datasetIndex].hidden = false;
+                    if (wasHidden) {
+                        console.log(`✅ Dataset ${toggleId} (index ${datasetIndex}) shown`);
+                    }
+                } else {
+                    chart.data.datasets[datasetIndex].hidden = true;
+                    if (!wasHidden) {
+                        console.log(`❌ Dataset ${toggleId} (index ${datasetIndex}) hidden`);
+                    }
+                }
+                
+                // Update chart with smooth transition animation
+                chart.update({
+                    duration: 400,
+                    easing: 'easeOutQuad'
+                });
             }
 
-            document.getElementById('cpuToggle').addEventListener('change', () => toggleDataset(0, performanceChart));
-            document.getElementById('memoryToggle').addEventListener('change', () => toggleDataset(1, performanceChart));
-            document.getElementById('networkToggle').addEventListener('change', () => toggleDataset(2, performanceChart));
-            document.getElementById('diskToggle').addEventListener('change', () => toggleDataset(3, performanceChart));
-            document.getElementById('diskUsageToggle').addEventListener('change', () => toggleDataset(4, performanceChart));
-            document.getElementById('networkThroughputToggle').addEventListener('change', () => toggleDataset(5, performanceChart));
-            document.getElementById('responseTimeToggle').addEventListener('change', () => toggleDataset(6, performanceChart));
+            // --- Restore toggle state from localStorage or use defaults ---
+            // Get saved filters or default to all toggles active
+            const savedActiveIds = loadActiveGraphs(serverId);
+            
+            // Always ensure all datasets are visible by default for first-time visitors
+            // For returning users, respect their saved preferences
+            const activeIds = savedActiveIds || toggleIds;
+            
+            // Initialize all checkboxes and dataset visibility
+            toggleIds.forEach(toggleId => {
+                const checkbox = document.getElementById(toggleId);
+                if (checkbox) {
+                    // Always check all boxes by default if no saved preferences
+                    // Or set according to saved preferences if they exist
+                    checkbox.checked = savedActiveIds ? activeIds.includes(toggleId) : true;
+                    
+                    // Initialize dataset visibility based on checkbox state
+                    syncCheckboxWithChart(toggleId);
+                    
+                    // Add change event listener with persistence
+                    checkbox.addEventListener('change', function() {
+                        // Update dataset visibility when checkbox changes
+                        syncCheckboxWithChart(toggleId);
+                        
+                        // Save current state to localStorage
+                        const currentActiveIds = toggleIds.filter(id => {
+                            const cb = document.getElementById(id);
+                            return cb && cb.checked;
+                        });
+                        
+                        // Always save preferences to persist between sessions
+                        saveActiveGraphs(serverId, currentActiveIds);
+                        console.log(`🔄 Updated chart preferences for server ${serverId}`);
+                    });
+                }
+            });
         });
     </script>
 @endsection
