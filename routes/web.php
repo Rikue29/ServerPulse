@@ -5,13 +5,16 @@ use App\Http\Controllers\ServerController;
 use App\Http\Controllers\LogController;
 use App\Http\Controllers\AnalyticsController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\SettingsController;
+use App\Http\Controllers\UserController;
 use App\Http\Livewire\LogDetails;
 use App\Livewire\AlertsTable;
 use Illuminate\Support\Facades\Route;
 
 // Public agent installation routes (no auth required)
-Route::get('/agent/install.sh', [AutoRegisterController::class, 'installScript']);
-Route::get('/agent/download', [AutoRegisterController::class, 'downloadAgent']);
+// Commented out due to missing controller
+// Route::get('/agent/install.sh', [AutoRegisterController::class, 'installScript']);
+// Route::get('/agent/download', [AutoRegisterController::class, 'downloadAgent']);
 Route::get('/install', function() {
     return view('install-agent');
 });
@@ -35,7 +38,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
 
     //Alert Route
-    Route::post('/alerts/trigger', [AlertController::class, 'trigger']);
+    // Commented out due to missing controller
+    // Route::post('/alerts/trigger', [AlertController::class, 'trigger']);
 
     //Test Alert Route
     Route::get('/test-alerts', function () {
@@ -60,13 +64,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/analytics', [AnalyticsController::class, 'index'])->name('analytics');
 
 
-    //Test
-    Route::get('/hello', function () {
-    return view('test-hello'); 
-});
+    // Settings Route
+    Route::get('/settings', [SettingsController::class, 'index'])->name('settings');
 
-
-
+    // User Route
+    Route::get('/user', [UserController::class, 'index'])->name('user');
 });
 
 require __DIR__.'/auth.php';

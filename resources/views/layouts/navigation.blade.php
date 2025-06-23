@@ -59,22 +59,22 @@
                 <span :class="{ 'lg:hidden': sidebarMinimized }" class="ml-3 transition-opacity duration-300">Alerts</span>
             </a>
 
-            <a href="/analytics" 
-               class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-colors duration-200 {{ request()->is('analytics') ? 'bg-blue-50 text-blue-700' : 'text-gray-900 hover:bg-gray-100' }}"
+            <a href="{{ route('analytics') }}" 
+               class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-colors duration-200 {{ request()->routeIs('analytics') ? 'bg-blue-50 text-blue-700' : 'text-gray-900 hover:bg-gray-100' }}"
                :class="{ 'justify-center': sidebarMinimized }">
                 <i class="fas fa-chart-bar text-lg w-5"></i>
                 <span :class="{ 'lg:hidden': sidebarMinimized }" class="ml-3 transition-opacity duration-300">Analytics</span>
             </a>
 
-            <a href="#" 
-               class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg text-gray-900 hover:bg-gray-100 transition-colors duration-200"
+            <a href="{{ route('user') }}" 
+               class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-colors duration-200 {{ request()->routeIs('user') ? 'bg-blue-50 text-blue-700' : 'text-gray-900 hover:bg-gray-100' }}"
                :class="{ 'justify-center': sidebarMinimized }">
                 <i class="fas fa-users text-lg w-5"></i>
                 <span :class="{ 'lg:hidden': sidebarMinimized }" class="ml-3 transition-opacity duration-300">Users</span>
             </a>
 
-            <a href="#" 
-               class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg text-gray-900 hover:bg-gray-100 transition-colors duration-200"
+            <a href="{{ route('settings') }}" 
+               class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-colors duration-200 {{ request()->routeIs('settings') ? 'bg-blue-50 text-blue-700' : 'text-gray-900 hover:bg-gray-100' }}"
                :class="{ 'justify-center': sidebarMinimized }">
                 <i class="fas fa-cog text-lg w-5"></i>
                 <span :class="{ 'lg:hidden': sidebarMinimized }" class="ml-3 transition-opacity duration-300">Settings</span>
