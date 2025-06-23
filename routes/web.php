@@ -6,6 +6,7 @@ use App\Http\Controllers\LogController;
 use App\Http\Controllers\AnalyticsController;
 use App\Http\Livewire\LogDetails;
 use App\Livewire\AlertsTable;
+use App\Http\Controllers\NotificationPreferenceController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -55,6 +56,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
     //Test
     Route::get('/hello', function () {
     return view('test-hello'); 
+
+    //notification setting routes
+    Route::middleware(['auth', 'verified'])->group(function () {
+    Route::get('/settings/notifications', [NotificationPreferenceController::class, 'edit'])->name('notification-preferences.edit');
+    Route::post('/settings/notifications', [NotificationPreferenceController::class, 'update'])->name('notification-preferences.update');
+});
+
 });
 
 
