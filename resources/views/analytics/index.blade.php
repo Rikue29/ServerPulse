@@ -51,7 +51,7 @@
             <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
                 <div class="flex items-center justify-between">
                     <h3 class="text-sm font-medium text-gray-500">Storage Usage</h3>
-                    <i class="fas fa-hdd text-orange-500"></i>
+                    <i class="fas fa-hdd text-yellow-500"></i>
                 </div>
                 <div class="mt-4">
                     <span class="text-3xl font-bold text-gray-900">{{ number_format($summary['storage_usage'], 1) }}%</span>
@@ -105,7 +105,7 @@
             <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
                 <div class="flex items-center justify-between">
                     <h3 class="text-sm font-medium text-gray-500">Response Time</h3>
-                    <i class="fas fa-clock text-rose-500"></i>
+                    <i class="fas fa-clock text-green-500"></i>
                 </div>
                 <div class="mt-4">
                     <span class="text-3xl font-bold text-gray-900">
@@ -121,31 +121,19 @@
             <!-- System Uptime -->
             <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
                 <div class="flex items-center justify-between">
-                    <h3 class="text-sm font-medium text-gray-500">
-                        @if($selected_server->status === 'online')
-                            System Uptime
-                        @else
-                            System Downtime
-                        @endif
-                    </h3>
-                    <i class="fas fa-server text-{{ $selected_server->status === 'online' ? 'blue' : 'red' }}-500"></i>
+                    <h3 class="text-sm font-medium text-gray-500">System Uptime</h3>
+                    <i class="fas fa-server text-blue-500"></i>
                 </div>
                 <div class="mt-4">
-                    <span class="text-3xl font-bold text-{{ $selected_server->status === 'online' ? 'gray' : 'red' }}-900">
-                        @if($selected_server->status === 'online')
-                            {{ $summary['system_uptime'] }}
+                    <span class="text-3xl font-bold text-gray-900">
+                        @if(!empty($chart_data['system_uptime']))
+                            {{ number_format(end($chart_data['system_uptime']), 1) }}
                         @else
-                            {{ $selected_server->current_downtime_formatted ?? 'N/A' }}
+                            0
                         @endif
                     </span>
                 </div>
-                <p class="text-xs text-gray-500 mt-1">
-                    @if($selected_server->status === 'online')
-                        Current Uptime
-                    @else
-                        Current Downtime
-                    @endif
-                </p>
+                <p class="text-xs text-gray-500 mt-1">hours</p>
             </div>
         </div>
 
@@ -177,24 +165,24 @@
                             <input type="checkbox" id="memoryToggle" class="form-checkbox h-4 w-4 text-purple-600" checked>
                             <span class="ml-2 text-gray-700">Memory Usage</span>
                         </label>
-                         <label class="flex items-center">
+                        <label class="flex items-center">
                             <input type="checkbox" id="networkToggle" class="form-checkbox h-4 w-4 text-green-600" checked>
                             <span class="ml-2 text-gray-700">Network Activity</span>
                         </label>
                         <label class="flex items-center">
-                            <input type="checkbox" id="diskToggle" class="form-checkbox h-4 w-4 text-orange-600">
+                            <input type="checkbox" id="diskToggle" class="form-checkbox h-4 w-4 text-orange-600" checked>
                             <span class="ml-2 text-gray-700">Disk I/O (MB/s)</span>
                         </label>
                         <label class="flex items-center">
-                            <input type="checkbox" id="diskUsageToggle" class="form-checkbox h-4 w-4 text-purple-600">
+                            <input type="checkbox" id="diskUsageToggle" class="form-checkbox h-4 w-4 text-purple-600" checked>
                             <span class="ml-2 text-gray-700">Disk Usage (%)</span>
                         </label>
                         <label class="flex items-center">
-                            <input type="checkbox" id="networkThroughputToggle" class="form-checkbox h-4 w-4 text-pink-600">
+                            <input type="checkbox" id="networkThroughputToggle" class="form-checkbox h-4 w-4 text-pink-600" checked>
                             <span class="ml-2 text-gray-700">Network Throughput (KB/s)</span>
                         </label>
                         <label class="flex items-center">
-                            <input type="checkbox" id="responseTimeToggle" class="form-checkbox h-4 w-4 text-rose-600">
+                            <input type="checkbox" id="responseTimeToggle" class="form-checkbox h-4 w-4 text-green-600" checked>
                             <span class="ml-2 text-gray-700">Response Time (ms)</span>
                         </label>
                     </div>
@@ -211,8 +199,26 @@
         document.addEventListener('DOMContentLoaded', function () {
             const ctx = document.getElementById('performanceChart').getContext('2d');
             const chartData = @json($chart_data);
+            const serverId = document.getElementById('server_id') ? document.getElementById('server_id').value : null;
 
-            // Make chart globally accessible for real-time updates
+            // Utility for localStorage graph state (per-server)
+            function getActiveGraphKey(serverId) {
+                return `serverpulse_active_graphes_${serverId}`;
+            }
+            function saveActiveGraphs(serverId, activeIds) {
+                if (serverId && activeIds) {
+                    localStorage.setItem(getActiveGraphKey(serverId), JSON.stringify(activeIds));
+                }
+            }
+            function loadActiveGraphs(serverId) {
+                if (serverId) {
+                    const val = localStorage.getItem(getActiveGraphKey(serverId));
+                    if (val) return JSON.parse(val);
+                }
+                return null;
+            }
+
+            // Create chart and assign it to window so it can be accessed by the WebSocket event handler
             window.performanceChart = new Chart(ctx, {
                 type: 'line',
                 data: {
@@ -252,8 +258,7 @@
                             backgroundColor: 'rgba(249, 115, 22, 0.2)',
                             borderWidth: 2,
                             pointRadius: 0,
-                            tension: 0.4,
-                            hidden: true
+                            tension: 0.4
                         },
                         {
                             label: 'Disk Usage',
@@ -262,8 +267,7 @@
                             backgroundColor: 'rgba(168, 85, 247, 0.2)',
                             borderWidth: 2,
                             pointRadius: 0,
-                            tension: 0.4,
-                            hidden: true
+                            tension: 0.4
                         },
                         {
                             label: 'Network Throughput',
@@ -272,18 +276,16 @@
                             backgroundColor: 'rgba(236, 72, 153, 0.2)',
                             borderWidth: 2,
                             pointRadius: 0,
-                            tension: 0.4,
-                            hidden: true
+                            tension: 0.4
                         },
                         {
                             label: 'Response Time',
                             data: chartData.response_time,
-                            borderColor: 'rgba(220, 38, 127, 1)',
-                            backgroundColor: 'rgba(220, 38, 127, 0.2)',
+                            borderColor: 'rgba(34, 197, 94, 1)',
+                            backgroundColor: 'rgba(34, 197, 94, 0.2)',
                             borderWidth: 2,
                             pointRadius: 0,
-                            tension: 0.4,
-                            hidden: true
+                            tension: 0.4
                         }
                     ]
                 },
@@ -320,45 +322,44 @@
                 }
             });
 
-            // Set global chart instance for real-time updates
-            if (typeof performanceChart !== 'undefined') {
-                performanceChart = window.performanceChart;
-                console.log('📊 Chart initialized and made globally accessible for real-time updates');
-            }
-
-            // Load saved toggle states from localStorage
-            function loadToggleStates() {
-                const toggles = [
-                    { id: 'cpuToggle', datasetIndex: 0 },
-                    { id: 'memoryToggle', datasetIndex: 1 },
-                    { id: 'networkToggle', datasetIndex: 2 },
-                    { id: 'diskToggle', datasetIndex: 3 },
-                    { id: 'diskUsageToggle', datasetIndex: 4 },
-                    { id: 'networkThroughputToggle', datasetIndex: 5 },
-                    { id: 'responseTimeToggle', datasetIndex: 6 }
-                ];
-
-                toggles.forEach(toggle => {
-                    const element = document.getElementById(toggle.id);
-                    if (element) {
-                        // Load saved state or use default (checked for first 3, unchecked for others)
-                        const savedState = localStorage.getItem(`analytics_${toggle.id}`);
-                        const defaultState = toggle.datasetIndex < 3; // First 3 are checked by default
-                        const isChecked = savedState !== null ? savedState === 'true' : defaultState;
-                        
-                        element.checked = isChecked;
-                        
-                        // Apply the state to the chart
-                        if (isChecked) {
-                            window.performanceChart.show(toggle.datasetIndex);
+            // --- Restore toggle state from localStorage ---
+            const toggleIds = [
+                'cpuToggle', 'memoryToggle', 'networkToggle', 'diskToggle',
+                'diskUsageToggle', 'networkThroughputToggle', 'responseTimeToggle'
+            ];
+            const toggles = toggleIds.map(id => document.getElementById(id));
+            const chart = window.performanceChart;
+            const activeIds = loadActiveGraphs(serverId);
+            if (activeIds) {
+                toggles.forEach((el, idx) => {
+                    if (el) {
+                        el.checked = activeIds.includes(toggleIds[idx]);
+                        // Show/hide dataset accordingly
+                        if (el.checked) {
+                            chart.show(idx);
                         } else {
-                            window.performanceChart.hide(toggle.datasetIndex);
+                            chart.hide(idx);
                         }
                     }
                 });
-                
-                console.log('📊 Graph toggle states restored from localStorage');
             }
+
+            // --- Save toggle state on change ---
+            toggles.forEach((el, idx) => {
+                if (el) {
+                    el.addEventListener('change', function() {
+                        // Show/hide dataset
+                        if (el.checked) {
+                            chart.show(idx);
+                        } else {
+                            chart.hide(idx);
+                        }
+                        // Save all checked toggles
+                        const checkedIds = toggleIds.filter((id, i) => toggles[i] && toggles[i].checked);
+                        saveActiveGraphs(serverId, checkedIds);
+                    });
+                }
+            });
 
             function toggleDataset(id, chart) {
                 const isVisible = chart.isDatasetVisible(id);
@@ -368,51 +369,6 @@
                     chart.show(id);
                 }
             }
-
-            // Save toggle state to localStorage when changed
-            function saveToggleState(toggleId, isChecked) {
-                localStorage.setItem(`analytics_${toggleId}`, isChecked.toString());
-                console.log(`💾 Saved ${toggleId} state: ${isChecked}`);
-            }
-
-            // Load saved states when page loads
-            loadToggleStates();
-
-            // Add event listeners with localStorage saving
-            document.getElementById('cpuToggle').addEventListener('change', (e) => {
-                toggleDataset(0, window.performanceChart);
-                saveToggleState('cpuToggle', e.target.checked);
-            });
-            
-            document.getElementById('memoryToggle').addEventListener('change', (e) => {
-                toggleDataset(1, window.performanceChart);
-                saveToggleState('memoryToggle', e.target.checked);
-            });
-            
-            document.getElementById('networkToggle').addEventListener('change', (e) => {
-                toggleDataset(2, window.performanceChart);
-                saveToggleState('networkToggle', e.target.checked);
-            });
-            
-            document.getElementById('diskToggle').addEventListener('change', (e) => {
-                toggleDataset(3, window.performanceChart);
-                saveToggleState('diskToggle', e.target.checked);
-            });
-            
-            document.getElementById('diskUsageToggle').addEventListener('change', (e) => {
-                toggleDataset(4, window.performanceChart);
-                saveToggleState('diskUsageToggle', e.target.checked);
-            });
-            
-            document.getElementById('networkThroughputToggle').addEventListener('change', (e) => {
-                toggleDataset(5, window.performanceChart);
-                saveToggleState('networkThroughputToggle', e.target.checked);
-            });
-            
-            document.getElementById('responseTimeToggle').addEventListener('change', (e) => {
-                toggleDataset(6, window.performanceChart);
-                saveToggleState('responseTimeToggle', e.target.checked);
-            });
         });
     </script>
 @endsection
