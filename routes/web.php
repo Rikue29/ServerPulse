@@ -9,6 +9,13 @@ use App\Http\Livewire\LogDetails;
 use App\Livewire\AlertsTable;
 use Illuminate\Support\Facades\Route;
 
+// Public agent installation routes (no auth required)
+Route::get('/agent/install.sh', [AutoRegisterController::class, 'installScript']);
+Route::get('/agent/download', [AutoRegisterController::class, 'downloadAgent']);
+Route::get('/install', function() {
+    return view('install-agent');
+});
+
 Route::get('/', function () {
     return redirect()->route('dashboard');
 });

@@ -32,8 +32,7 @@
         @livewireStyles
     </head>
     <body class="font-sans antialiased h-full">
-        @include('layouts.navigation')
-        
+        @include('layouts.navigation')        
         @livewireScripts
         @stack('scripts')
     </body>

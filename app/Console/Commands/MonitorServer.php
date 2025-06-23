@@ -26,6 +26,24 @@ class MonitorServer extends Command
 
         foreach ($servers as $server) {
             $wasOnline = $server->status === 'online';
+            $this->info("Monitoring server: {$server->name} ({$server->ip_address}) - Current status: {$server->status}");
+            
+            // Check for agent-enabled servers that haven't sent a heartbeat in over a minute
+            if ($server->agent_enabled && $server->agent_last_heartbeat) {
+                $lastHeartbeat = $server->agent_last_heartbeat;
+                $heartbeatTimeout = now()->subMinute();
+                
+                if ($lastHeartbeat < $heartbeatTimeout && $server->status === 'online') {
+                    $this->info("Agent last heartbeat was over a minute ago for server {$server->name} - marking as offline");
+                    $server->status = 'offline';
+                    $server->last_down_at = now();
+                    $server->running_since = null;
+                    $server->save();
+                    
+                    // We need to collect metrics but we already know it's offline due to agent not reporting
+                    $wasOnline = false; // Update this for below code to avoid toggling status back
+                }
+            }
             
             // 1. Get raw metrics from our stateless service with response time measurement
             $startTime = microtime(true);
@@ -58,10 +76,14 @@ class MonitorServer extends Command
 
             if ($isOnline && !$wasOnline) {
                 // Server just came online
+                $this->info("Server {$server->name} has come back ONLINE");
                 $server->last_down_at = null;
+                $server->running_since = now();
             } elseif (!$isOnline && $wasOnline) {
                 // Server just went offline
+                $this->error("Server {$server->name} has gone OFFLINE");
                 $server->last_down_at = now();
+                $server->running_since = null;
             }
             
             $server->save();

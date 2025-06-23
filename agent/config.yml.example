@@ -1,10 +1,10 @@
 server:
-  endpoint: "http://serverpulse.test:8080"
+  endpoint: "http://192.168.81.1"
   auth_token: "WILL_BE_GENERATED_AFTER_REGISTRATION"
   agent_id: "WILL_BE_GENERATED_AFTER_REGISTRATION"
 
 collection:
-  interval: 30  # Data collection interval in seconds
+  interval: 5  # Data collection interval in seconds
   metrics:
     - system_stats
     - disk_usage

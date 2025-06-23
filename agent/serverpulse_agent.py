@@ -115,6 +115,83 @@ class ServerPulseAgent:
                 return "127.0.0.1"
     def register_agent(self):
         """Register this agent with the ServerPulse server"""
+        # Check if auto_register is enabled in config
+        auto_register = self.config.get('server', {}).get('auto_register', False)
+        
+        if auto_register:
+            return self.auto_register()
+        else:
+            return self.manual_register()
+    
+    def auto_register(self):
+        """Auto-register with ServerPulse using the new API"""
+        endpoint = f"{self.config['server']['endpoint'].rstrip('/')}/api/v1/servers/auto-register"
+        
+        local_ip = self.get_local_ip()
+        system_info = self.get_system_info()
+        
+        registration_data = {
+            'server_name': f"{socket.gethostname()}-auto",
+            'ip_address': local_ip,
+            'hostname': socket.gethostname(),
+            'os': f"{system_info.get('os', 'Unknown')} {system_info.get('os_version', '')}".strip(),
+        }
+        
+        self.logger.info(f"Auto-registering server: {registration_data['server_name']}")
+        self.logger.info(f"Registration endpoint: {endpoint}")
+        
+        max_retries = 4
+        for attempt in range(1, max_retries + 1):
+            try:
+                self.logger.info(f"Auto-registration attempt {attempt}/{max_retries}")
+                response = requests.post(endpoint, json=registration_data, timeout=30)
+                self.logger.info(f"Registration response: {response.status_code}")
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    if data.get('success'):
+                        self.agent_id = data['agent_id']
+                        self.auth_token = data['auth_token']
+                        self.server_id = data.get('server_id')
+                        
+                        # Update config
+                        self.config['server']['agent_id'] = self.agent_id
+                        self.config['server']['auth_token'] = self.auth_token
+                        # Update collection interval if provided
+                        if 'config' in data and 'collection_interval' in data['config']:
+                            self.config['collection']['interval'] = data['config']['collection_interval']
+                        self.save_config()
+                        
+                        self.logger.info(f"🎉 Successfully auto-registered with ServerPulse!")
+                        self.logger.info(f"   Agent ID: {self.agent_id}")
+                        self.logger.info(f"   Server ID: {self.server_id}")
+                        self.logger.info(f"   Collection interval: {data.get('config', {}).get('collection_interval', 30)}s")
+                        return True
+                    else:
+                        self.logger.error(f"Auto-registration failed: {data.get('message', 'Unknown error')}")
+                        return False
+                else:
+                    self.logger.error(f"Auto-registration failed: {response.status_code} - {response.text}")
+                    return False
+                    
+            except requests.exceptions.ConnectionError as e:
+                self.logger.warning(f"Connection error (attempt {attempt}/{max_retries}): {e}")
+                if attempt < max_retries:
+                    wait_time = 2 ** attempt  # Exponential backoff
+                    self.logger.info(f"Waiting {wait_time} seconds before retry...")
+                    time.sleep(wait_time)
+                else:
+                    self.logger.error(f"All retry attempts failed for: {endpoint}")
+                    return False
+            except Exception as e:
+                self.logger.error(f"Auto-registration error: {e}")
+                return False
+        
+        self.logger.error("Failed to auto-register agent: No response")
+        return False
+    
+    def manual_register(self):
+        """Register this agent with the ServerPulse server (legacy method)"""
         endpoint = f"{self.config['server']['endpoint'].rstrip('/')}/api/v1/agents/register"
         
         local_ip = self.get_local_ip()

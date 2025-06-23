@@ -1,47 +1,140 @@
-<x-guest-layout>
-    <!-- Session Status -->
-    <x-auth-session-status class="mb-4" :status="session('status')" />
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title>Login</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
 
-    <form method="POST" action="{{ route('login') }}">
-        @csrf
+        body {
+            font-family: Arial, sans-serif;
+            height: 100vh;
+            background-color: #f0f2f5;
+        }
 
-        <!-- Email Address -->
-        <div>
-            <x-input-label for="email" :value="__('Email')" />
-            <x-text-input id="email" class="block mt-1 w-full" type="email" name="email" :value="old('email')" required autofocus autocomplete="username" />
-            <x-input-error :messages="$errors->get('email')" class="mt-2" />
+        .container {
+            display: flex;
+            height: 100vh;
+        }
+
+        .left {
+            flex: 1;
+            position: relative;
+            padding: 20px;
+            background-image: url('{{ asset("images/left-background.jpg") }}');
+            background-repeat: no-repeat;
+            background-position: center center;
+            background-size: 110%; /* Zoomed out size */
+            transition: background-size 0.5s ease;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* On hover: zoom to actual size (100%) */
+        .left:hover {
+            background-size: 100%;
+        }
+
+        /* Company logo on top left */
+        .logo {
+            width: 120px;
+            height: auto;
+        }
+
+        .right {
+            flex: 1;
+            background-color: #ffffff;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 40px;
+        }
+
+        .login-box {
+            width: 100%;
+            max-width: 400px;
+        }
+
+        .login-box h2 {
+            margin-bottom: 5px;
+            text-align: center;
+            color: #333;
+        }
+        
+        .login-box .subtext {
+            margin-bottom: 25px;
+            text-align: center;
+            color: #666;
+            font-size: 14px;
+        }
+
+        .login-box input[type="email"],
+        .login-box input[type="password"] {
+            width: 100%;
+            padding: 12px 15px;
+            margin: 10px 0;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            font-size: 16px;
+        }
+
+        .login-box button {
+            width: 100%;
+            padding: 12px;
+            background-color: #007BFF;
+            border: none;
+            color: white;
+            font-size: 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin-top: 20px;
+        }
+
+        .login-box button:hover {
+            background-color: #0056b3;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                flex-direction: column;
+            }
+            .left, .right {
+                flex: unset;
+                width: 100%;
+                height: 50vh;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="left">
+            <img src="{{ asset('images/company-logo.jpg') }}" alt="Company Logo" class="logo" />
         </div>
-
-        <!-- Password -->
-        <div class="mt-4">
-            <x-input-label for="password" :value="__('Password')" />
-
-            <x-text-input id="password" class="block mt-1 w-full"
-                            type="password"
-                            name="password"
-                            required autocomplete="current-password" />
-
-            <x-input-error :messages="$errors->get('password')" class="mt-2" />
+        <div class="right">
+            <div class="login-box">
+                <h2>Login</h2>
+                <div class="subtext">login to access to the server</div>
+                
+                @if ($errors->any())
+                    <div style="background-color: #fee; padding: 10px; border-radius: 6px; margin-bottom: 15px; border: 1px solid #fcc;">
+                        @foreach ($errors->all() as $error)
+                            <div style="color: #c33; font-size: 14px;">{{ $error }}</div>
+                        @endforeach
+                    </div>
+                @endif
+                <form method="POST" action="{{ route('login') }}">
+                    @csrf
+                    <input type="email" name="email" placeholder="Email Address" value="{{ old('email') }}" required />
+                    <input type="password" name="password" placeholder="Password" required />
+                    <button type="submit">Login</button>
+                </form>
+            </div>
         </div>
-
-        <!-- Remember Me -->
-        <div class="block mt-4">
-            <label for="remember_me" class="inline-flex items-center">
-                <input id="remember_me" type="checkbox" class="rounded border-gray-300 text-indigo-600 shadow-sm focus:ring-indigo-500" name="remember">
-                <span class="ms-2 text-sm text-gray-600">{{ __('Remember me') }}</span>
-            </label>
-        </div>
-
-        <div class="flex items-center justify-end mt-4">
-            @if (Route::has('password.request'))
-                <a class="underline text-sm text-gray-600 hover:text-gray-900 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500" href="{{ route('password.request') }}">
-                    {{ __('Forgot your password?') }}
-                </a>
-            @endif
-
-            <x-primary-button class="ms-3">
-                {{ __('Log in') }}
-            </x-primary-button>
-        </div>
-    </form>
-</x-guest-layout>
+    </div>
+</body>
+</html>

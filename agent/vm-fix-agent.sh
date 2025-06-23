@@ -6,7 +6,7 @@ echo "================================================="
 
 # 1. Update config endpoint
 echo "1. Updating configuration..."
-sudo sed -i 's|endpoint: ".*"|endpoint: "http://192.168.0.101:8080"|' /etc/serverpulse-agent/config.yml
+sudo sed -i 's|endpoint: ".*"|endpoint: "http://192.168.81.1"|' /etc/serverpulse-agent/config.yml
 sudo sed -i 's|/var/log/serverpulse-agent.log|/var/log/serverpulse-agent/agent.log|' /etc/serverpulse-agent/config.yml
 
 echo "   Current endpoint:"
@@ -22,7 +22,7 @@ sudo chmod 755 /var/log/serverpulse-agent
 # 3. Test connectivity
 echo ""
 echo "3. Testing connectivity to ServerPulse..."
-curl -I http://192.168.0.101:8080 2>/dev/null && echo "✅ Connection successful" || echo "❌ Connection failed"
+curl -I http://192.168.81.1 2>/dev/null && echo "✅ Connection successful" || echo "❌ Connection failed"
 
 # 4. Restart agent
 echo ""

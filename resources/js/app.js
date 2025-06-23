@@ -24,9 +24,25 @@ window.Alpine = Alpine;
 
 Alpine.start();
 
+// Helper to humanize seconds into a d/h/m/s format
+function humanizeSeconds(seconds) {
+    seconds = parseInt(seconds, 10);
+    if (isNaN(seconds) || seconds < 1) return '0s';
+    const d = Math.floor(seconds / 86400);
+    const h = Math.floor((seconds % 86400) / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = Math.floor(seconds % 60);
+    return [d ? d + 'd' : '', h ? h + 'h' : '', m ? m + 'm' : '', s ? s + 's' : ''].filter(Boolean).join(' ') || '0s';
+}
+
+// Global object to hold uptime counters
+window.serverUptimeTrackers = {};
+
+
 // Laravel Echo + Pusher for real-time server status updates
 import Echo from 'laravel-echo';
 import Pusher from 'pusher-js';
+
 window.Pusher = Pusher;
 
 console.log('🔧 Debug: Pusher object available:', window.Pusher);
@@ -48,7 +64,6 @@ window.Echo = new Echo({
 });
 
 console.log('🔧 Debug: Echo initialized:', window.Echo);
-
 window.Echo.connector.pusher.connection.bind('state_change', function(states) {
     console.log("🔧 Debug: Pusher connection state changed from", states.previous, "to", states.current);
 });
@@ -90,7 +105,7 @@ channel.subscribed(() => {
         console.error('❌ server_id is missing in event data!', eventData);
         return;
     }
-
+}
     console.log('✅ Processing event for server_id:', eventData.server_id);
 
     // Check which page we are on and call the appropriate update function.
@@ -401,6 +416,15 @@ function updateServersPage(eventData) {
                     console.log('✅ Updated Uptime/Downtime to:', eventData.system_uptime || 'N/A', '(fallback)');
                 }
             }
+        } else { // Server is offline
+            title.textContent = 'System Downtime';
+            // If a timer was running, stop it.
+            if (window.serverUptimeTrackers[trackerKey]) {
+                console.log(`[Analytics Page] Clearing uptime tracker for offline server ${event.server_id}.`);
+                clearInterval(window.serverUptimeTrackers[trackerKey].interval);
+                delete window.serverUptimeTrackers[trackerKey];
+            }
+            value.textContent = event.formatted_downtime || '0s';
         }
     } else {
         console.warn('❌ Could not find row for server_id:', eventData.server_id);

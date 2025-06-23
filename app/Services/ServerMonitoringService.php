@@ -212,6 +212,10 @@ Write-Output "$cpu|$memory|$disk|$uptime|$network|$diskIO"
             $metrics['status'] = $server->status;
             $metrics['running_since'] = $server->running_since;
             $metrics['last_down_at'] = $server->last_down_at;
+            // Add formatted downtime for human-readable display
+            if ($server->status === 'offline' && $server->last_down_at) {
+                $metrics['formatted_downtime'] = $this->formatUptimeFromSeconds($metrics['current_downtime'] ?? 0);
+            }
 
             // Calculate simple network health metrics
             $metrics['network_health'] = 'unknown';
@@ -271,7 +275,7 @@ Write-Output "$cpu|$memory|$disk|$uptime|$network|$diskIO"
             return [
                 'cpu_usage' => 0,
                 'ram_usage' => 0,
-                'disk_usage' => 0,
+                'disk_usage' => 0, // Set disk usage to 0 when offline
                 'status' => 'offline',
                 'error' => $e->getMessage(),
                 'last_down_at' => $server->last_down_at,
