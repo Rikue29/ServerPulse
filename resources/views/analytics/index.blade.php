@@ -203,17 +203,27 @@
 
             // Utility for localStorage graph state (per-server)
             function getActiveGraphKey(serverId) {
-                return `serverpulse_active_graphes_${serverId}`;
+                return `serverpulse_active_graphs_${serverId}`;
             }
             function saveActiveGraphs(serverId, activeIds) {
                 if (serverId && activeIds) {
                     localStorage.setItem(getActiveGraphKey(serverId), JSON.stringify(activeIds));
+                    console.log('✅ Saved active graphs:', activeIds);
                 }
             }
             function loadActiveGraphs(serverId) {
                 if (serverId) {
                     const val = localStorage.getItem(getActiveGraphKey(serverId));
-                    if (val) return JSON.parse(val);
+                    if (val) {
+                        try {
+                            const parsed = JSON.parse(val);
+                            console.log('📊 Loaded active graphs:', parsed);
+                            return parsed;
+                        } catch (e) {
+                            console.error('❌ Error parsing active graphs:', e);
+                            return null;
+                        }
+                    }
                 }
                 return null;
             }
@@ -231,7 +241,8 @@
                             backgroundColor: 'rgba(59, 130, 246, 0.2)',
                             borderWidth: 2,
                             pointRadius: 0,
-                            tension: 0.4
+                            tension: 0.4,
+                            hidden: false
                         },
                         {
                             label: 'Memory Usage',
@@ -240,7 +251,8 @@
                             backgroundColor: 'rgba(139, 92, 246, 0.2)',
                             borderWidth: 2,
                             pointRadius: 0,
-                            tension: 0.4
+                            tension: 0.4,
+                            hidden: false
                         },
                         {
                             label: 'Network Activity',
@@ -249,7 +261,8 @@
                             backgroundColor: 'rgba(16, 185, 129, 0.2)',
                             borderWidth: 2,
                             pointRadius: 0,
-                            tension: 0.4
+                            tension: 0.4,
+                            hidden: false
                         },
                         {
                             label: 'Disk I/O',
@@ -258,7 +271,8 @@
                             backgroundColor: 'rgba(249, 115, 22, 0.2)',
                             borderWidth: 2,
                             pointRadius: 0,
-                            tension: 0.4
+                            tension: 0.4,
+                            hidden: false
                         },
                         {
                             label: 'Disk Usage',
@@ -267,7 +281,8 @@
                             backgroundColor: 'rgba(168, 85, 247, 0.2)',
                             borderWidth: 2,
                             pointRadius: 0,
-                            tension: 0.4
+                            tension: 0.4,
+                            hidden: false
                         },
                         {
                             label: 'Network Throughput',
@@ -276,7 +291,8 @@
                             backgroundColor: 'rgba(236, 72, 153, 0.2)',
                             borderWidth: 2,
                             pointRadius: 0,
-                            tension: 0.4
+                            tension: 0.4,
+                            hidden: false
                         },
                         {
                             label: 'Response Time',
@@ -285,13 +301,38 @@
                             backgroundColor: 'rgba(34, 197, 94, 0.2)',
                             borderWidth: 2,
                             pointRadius: 0,
-                            tension: 0.4
+                            tension: 0.4,
+                            hidden: false
                         }
                     ]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: true,
+                    // Add smooth transition animations
+                    animation: {
+                        duration: 600,
+                        easing: 'easeOutQuad',
+                        mode: 'active'
+                    },
+                    transitions: {
+                        show: {
+                            animations: {
+                                properties: ['opacity'],
+                                from: 0,
+                                to: 1,
+                                duration: 600
+                            }
+                        },
+                        hide: {
+                            animations: {
+                                properties: ['opacity'],
+                                from: 1,
+                                to: 0,
+                                duration: 400
+                            }
+                        }
+                    },
                     scales: {
                         y: {
                             beginAtZero: true,
@@ -302,6 +343,10 @@
                                     }
                                     return value;
                                 }
+                            },
+                            // Add animation for scales too
+                            animation: {
+                                duration: 500
                             }
                         }
                     },
@@ -322,53 +367,92 @@
                 }
             });
 
-            // --- Restore toggle state from localStorage ---
-            const toggleIds = [
-                'cpuToggle', 'memoryToggle', 'networkToggle', 'diskToggle',
-                'diskUsageToggle', 'networkThroughputToggle', 'responseTimeToggle'
-            ];
-            const toggles = toggleIds.map(id => document.getElementById(id));
+            // --- Define toggle mapping between checkbox IDs and dataset indices ---
+            const toggleMapping = {
+                'cpuToggle': 0,
+                'memoryToggle': 1, 
+                'networkToggle': 2, 
+                'diskToggle': 3,
+                'diskUsageToggle': 4, 
+                'networkThroughputToggle': 5, 
+                'responseTimeToggle': 6
+            };
+
+            const toggleIds = Object.keys(toggleMapping);
             const chart = window.performanceChart;
-            const activeIds = loadActiveGraphs(serverId);
-            if (activeIds) {
-                toggles.forEach((el, idx) => {
-                    if (el) {
-                        el.checked = activeIds.includes(toggleIds[idx]);
-                        // Show/hide dataset accordingly
-                        if (el.checked) {
-                            chart.show(idx);
-                        } else {
-                            chart.hide(idx);
-                        }
+
+            // Function to synchronize checkbox state with chart visibility
+            function syncCheckboxWithChart(toggleId) {
+                const checkbox = document.getElementById(toggleId);
+                const datasetIndex = toggleMapping[toggleId];
+                
+                if (!checkbox || datasetIndex === undefined) return;
+                
+                // Ensure dataset at index exists
+                if (!chart.data.datasets[datasetIndex]) {
+                    console.error(`❌ Dataset at index ${datasetIndex} does not exist`);
+                    return;
+                }
+
+                // Set dataset visibility based on checkbox, respecting current state
+                const wasHidden = chart.data.datasets[datasetIndex].hidden;
+                const shouldShow = checkbox.checked;
+                
+                if (shouldShow) {
+                    chart.data.datasets[datasetIndex].hidden = false;
+                    if (wasHidden) {
+                        console.log(`✅ Dataset ${toggleId} (index ${datasetIndex}) shown`);
                     }
+                } else {
+                    chart.data.datasets[datasetIndex].hidden = true;
+                    if (!wasHidden) {
+                        console.log(`❌ Dataset ${toggleId} (index ${datasetIndex}) hidden`);
+                    }
+                }
+                
+                // Update chart with smooth transition animation
+                chart.update({
+                    duration: 400,
+                    easing: 'easeOutQuad'
                 });
             }
 
-            // --- Save toggle state on change ---
-            toggles.forEach((el, idx) => {
-                if (el) {
-                    el.addEventListener('change', function() {
-                        // Show/hide dataset
-                        if (el.checked) {
-                            chart.show(idx);
-                        } else {
-                            chart.hide(idx);
-                        }
-                        // Save all checked toggles
-                        const checkedIds = toggleIds.filter((id, i) => toggles[i] && toggles[i].checked);
-                        saveActiveGraphs(serverId, checkedIds);
+            // --- Restore toggle state from localStorage or use defaults ---
+            // Get saved filters or default to all toggles active
+            const savedActiveIds = loadActiveGraphs(serverId);
+            
+            // Always ensure all datasets are visible by default for first-time visitors
+            // For returning users, respect their saved preferences
+            const activeIds = savedActiveIds || toggleIds;
+            
+            // Initialize all checkboxes and dataset visibility
+            toggleIds.forEach(toggleId => {
+                const checkbox = document.getElementById(toggleId);
+                if (checkbox) {
+                    // Always check all boxes by default if no saved preferences
+                    // Or set according to saved preferences if they exist
+                    checkbox.checked = savedActiveIds ? activeIds.includes(toggleId) : true;
+                    
+                    // Initialize dataset visibility based on checkbox state
+                    syncCheckboxWithChart(toggleId);
+                    
+                    // Add change event listener with persistence
+                    checkbox.addEventListener('change', function() {
+                        // Update dataset visibility when checkbox changes
+                        syncCheckboxWithChart(toggleId);
+                        
+                        // Save current state to localStorage
+                        const currentActiveIds = toggleIds.filter(id => {
+                            const cb = document.getElementById(id);
+                            return cb && cb.checked;
+                        });
+                        
+                        // Always save preferences to persist between sessions
+                        saveActiveGraphs(serverId, currentActiveIds);
+                        console.log(`🔄 Updated chart preferences for server ${serverId}`);
                     });
                 }
             });
-
-            function toggleDataset(id, chart) {
-                const isVisible = chart.isDatasetVisible(id);
-                if (isVisible) {
-                    chart.hide(id);
-                } else {
-                    chart.show(id);
-                }
-            }
         });
     </script>
 @endsection

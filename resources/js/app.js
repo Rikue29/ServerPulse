@@ -639,8 +639,8 @@ function updatePerformanceChart(eventData, actualThroughput) {
         
         console.log('🚨 EMERGENCY CHART UPDATE - Using throughput value:', actualThroughput.toFixed(2), 'KB/s');
         
-        // CRITICAL: Make throughput dataset visible
-        datasets[5].hidden = false;
+        // IMPORTANT: Preserve the hidden state of the dataset - don't force visibility
+        // Only update data - let the UI control visibility
         
         // FIXED: Check if we need to trim data first to avoid exceeding 50 points
         if (datasets[5].data.length >= 50) {
@@ -714,12 +714,32 @@ function updatePerformanceChart(eventData, actualThroughput) {
     // Ensure labels and data are aligned and sorted by time if needed
     // (Assume labels are already in correct order since logs are reversed in backend)
     
-    // Update chart with optimized animation for real-time updates
+    // Update chart with enhanced animations for real-time updates
     try {
         // Enhanced chart update for smoother real-time visualization
         chart.options.animation = {
-            duration: 250,        // Fast but smooth animation
+            duration: 500,        // Animation duration in ms - smooth but not too slow
             easing: 'easeOutQuad' // Smoother animation easing
+        };
+        
+        // Configure transitions specifically for showing/hiding datasets
+        chart.options.transitions = {
+            show: {
+                animations: {
+                    properties: ['opacity'],
+                    from: 0,
+                    to: 1,
+                    duration: 600
+                }
+            },
+            hide: {
+                animations: {
+                    properties: ['opacity'],
+                    from: 1,
+                    to: 0,
+                    duration: 400
+                }
+            }
         };
         
         // Use a more responsive update mode
