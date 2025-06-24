@@ -1,4 +1,7 @@
 import './bootstrap';
+import Chart from 'chart.js/auto';
+
+window.Chart = Chart;
 
 // EMERGENCY FIX FOR NETWORK THROUGHPUT
 // Global object to ensure network throughput is available everywhere
@@ -322,7 +325,7 @@ function updateAnalyticsPage(eventData) {
     }
     networkThroughputHistory[serverId].push(actualThroughput);
     console.log(`💾 Stored new values - Timestamp: ${currentTimestamp}, Bytes: ${networkRx + networkTx}`);
-
+    
     // Calculate disk I/O throughput centrally
     let diskIOThroughput = 0;
     const currentDiskIORead = parseInt(data.disk_io_read || 0, 10);
@@ -776,7 +779,7 @@ function handleServerSelectionChange() {
             datasets.forEach(dataset => {
                 dataset.data = [];
             });
-            window.performanceChart.update('none');
+            window.performanceChart.data.labels = [];
             console.log('🔄 Chart data cleared for new server');
         }
     }
@@ -1715,3 +1718,71 @@ document.addEventListener('DOMContentLoaded', function() {
         
     }, 5000); // Update every 5 seconds
 });
+
+// Initialize chart when DOM is loaded
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('🔧 Debug: DOM loaded, setting up event listeners');
+    
+    // Listen for Livewire events
+    if (window.Livewire) {
+        // Server selection changed
+        window.Livewire.on('serverSelectionChanged', (selectedServers) => {
+            console.log('🔄 Server selection changed:', selectedServers);
+            resetChartData();
+            if (window.performanceChart) {
+                window.performanceChart.update('none');
+            }
+        });
+        
+        // Chart data updated
+        window.Livewire.on('chartDataUpdated', (chartData) => {
+            console.log('📊 Chart data updated:', chartData);
+            if (window.performanceChart && chartData) {
+                updateChartWithNewData(chartData);
+            }
+        });
+    }
+});
+
+// Function to reset chart data
+function resetChartData() {
+    console.log('🔄 Resetting chart data');
+    lastUpdateTime = {};
+    lastNetworkBytes = {};
+    networkThroughputHistory = {};
+    lastDiskIORead = {};
+    lastDiskIOWrite = {};
+    lastKnownUptime = {};
+    
+    if (window.performanceChart) {
+        const datasets = window.performanceChart.data.datasets;
+        datasets.forEach(dataset => {
+            dataset.data = [];
+        });
+        window.performanceChart.data.labels = [];
+    }
+}
+
+// Function to update chart with new data
+function updateChartWithNewData(chartData) {
+    if (!window.performanceChart || !chartData) return;
+    
+    console.log('📊 Updating chart with new data');
+    
+    const chart = window.performanceChart;
+    
+    // Update labels
+    chart.data.labels = chartData.labels || [];
+    
+    // Update datasets
+    if (chartData.datasets && Array.isArray(chartData.datasets)) {
+        chartData.datasets.forEach((newDataset, index) => {
+            if (chart.data.datasets[index]) {
+                chart.data.datasets[index].data = newDataset.data || [];
+            }
+        });
+    }
+    
+    // Update the chart with animation
+    chart.update();
+}

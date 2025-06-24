@@ -69,6 +69,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     // User Route
     Route::get('/user', [UserController::class, 'index'])->name('user');
+
+    // Server selection routes
+    Route::get('/toggle-server/{id}', [ServerController::class, 'toggleServerSelection'])->name('toggle.server');
+    Route::get('/select-all-servers', [ServerController::class, 'selectAllServers'])->name('select.all.servers');
+    Route::get('/clear-server-selection', [ServerController::class, 'clearServerSelection'])->name('clear.server.selection');
+
+    // Chart data route
+    Route::get('/chart-data', [ServerController::class, 'getChartData'])->name('chart.data');
 });
 
 require __DIR__.'/auth.php';

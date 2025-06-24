@@ -143,4 +143,158 @@ class ServerController extends Controller
         return redirect()->route('servers.index')
             ->with('success', 'Server deleted successfully.');
     }
+
+    public function toggleServerSelection($serverId)
+    {
+        $serverId = (int) $serverId;
+        $selectedServers = session('selected_servers', []);
+        
+        // Force convert all elements to integers
+        $selectedServers = array_map('intval', $selectedServers);
+        
+        if (in_array($serverId, $selectedServers)) {
+            // Remove server from selection
+            $selectedServers = array_diff($selectedServers, [$serverId]);
+        } else {
+            // Add server to selection
+            $selectedServers[] = $serverId;
+        }
+        
+        // Store the updated selection in the session
+        session(['selected_servers' => $selectedServers]);
+        session()->save();
+        
+        return redirect()->back();
+    }
+    
+    public function selectAllServers()
+    {
+        $allServerIds = \App\Models\Server::pluck('id')->toArray();
+        session(['selected_servers' => $allServerIds]);
+        
+        return redirect()->back();
+    }
+    
+    public function clearServerSelection()
+    {
+        // Clear the selection by setting it to an empty array
+        session(['selected_servers' => []]);
+        session()->save();
+        
+        return redirect()->back();
+    }
+
+    public function getChartData()
+    {
+        $selectedServers = session('selected_servers', []);
+        
+        if (empty($selectedServers)) {
+            return response()->json([
+                'performance' => $this->getEmptyChartData(),
+                'disk' => $this->getEmptyChartData(),
+                'network' => $this->getEmptyChartData()
+            ]);
+        }
+        
+        // Get the last 24 hours of data points (one per hour)
+        $labels = [];
+        for ($i = 23; $i >= 0; $i--) {
+            $labels[] = now()->subHours($i)->format('H:00');
+        }
+        
+        // Get performance data for selected servers
+        $performanceLogs = \App\Models\PerformanceLog::whereIn('server_id', $selectedServers)
+            ->where('created_at', '>=', now()->subDay())
+            ->get()
+            ->groupBy(function($log) {
+                return $log->created_at->format('H:00');
+            });
+        
+        // Prepare data for charts
+        $cpuData = [];
+        $ramData = [];
+        $diskData = [];
+        $networkData = [];
+        
+        foreach ($labels as $label) {
+            $logs = $performanceLogs->get($label, collect([]));
+            
+            $cpuData[] = $logs->avg('cpu_usage') ?? 0;
+            $ramData[] = $logs->avg('ram_usage') ?? 0;
+            $diskData[] = $logs->avg('disk_usage') ?? 0;
+            $networkData[] = $logs->avg('network_tx') ?? 0;
+        }
+        
+        return response()->json([
+            'performance' => [
+                'labels' => $labels,
+                'datasets' => [
+                    [
+                        'label' => 'CPU Usage',
+                        'data' => $cpuData,
+                        'borderColor' => '#3B82F6',
+                        'backgroundColor' => 'rgba(59, 130, 246, 0.1)',
+                        'tension' => 0.1,
+                        'fill' => true
+                    ],
+                    [
+                        'label' => 'RAM Usage',
+                        'data' => $ramData,
+                        'borderColor' => '#10B981',
+                        'backgroundColor' => 'rgba(16, 185, 129, 0.1)',
+                        'tension' => 0.1,
+                        'fill' => true
+                    ]
+                ]
+            ],
+            'disk' => [
+                'labels' => $labels,
+                'datasets' => [
+                    [
+                        'label' => 'Disk Usage',
+                        'data' => $diskData,
+                        'borderColor' => '#F59E0B',
+                        'backgroundColor' => 'rgba(245, 158, 11, 0.1)',
+                        'tension' => 0.1,
+                        'fill' => true
+                    ]
+                ]
+            ],
+            'network' => [
+                'labels' => $labels,
+                'datasets' => [
+                    [
+                        'label' => 'Network Traffic',
+                        'data' => $networkData,
+                        'borderColor' => '#6366F1',
+                        'backgroundColor' => 'rgba(99, 102, 241, 0.1)',
+                        'tension' => 0.1,
+                        'fill' => true
+                    ]
+                ]
+            ]
+        ]);
+    }
+    
+    private function getEmptyChartData()
+    {
+        $labels = [];
+        for ($i = 23; $i >= 0; $i--) {
+            $labels[] = now()->subHours($i)->format('H:00');
+        }
+        
+        return [
+            'labels' => $labels,
+            'datasets' => [
+                [
+                    'label' => 'No Data',
+                    'data' => array_fill(0, 24, 0),
+                    'borderColor' => '#9CA3AF',
+                    'backgroundColor' => 'rgba(156, 163, 175, 0.1)',
+                    'tension' => 0.1,
+                    'fill' => true
+                ]
+            ]
+        ];
+    }
 }
