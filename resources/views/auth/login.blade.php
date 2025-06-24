@@ -127,12 +127,28 @@
                         @endforeach
                     </div>
                 @endif
-                <form method="POST" action="{{ route('login') }}">
+                <form method="POST" action="{{ route('login') }}" id="loginForm">
                     @csrf
                     <input type="email" name="email" placeholder="Email Address" value="{{ old('email') }}" required />
                     <input type="password" name="password" placeholder="Password" required />
                     <button type="submit">Login</button>
                 </form>
+                
+                <script>
+                // Handle CSRF token refresh on form submission error
+                document.getElementById('loginForm').addEventListener('submit', function() {
+                    // Store form data in case we need to retry
+                    sessionStorage.setItem('loginEmail', this.email.value);
+                });
+                
+                // Check if we have stored email and restore it
+                if (sessionStorage.getItem('loginEmail')) {
+                    const emailInput = document.querySelector('input[name="email"]');
+                    if (emailInput && !emailInput.value) {
+                        emailInput.value = sessionStorage.getItem('loginEmail');
+                    }
+                }
+                </script>
             </div>
         </div>
     </div>

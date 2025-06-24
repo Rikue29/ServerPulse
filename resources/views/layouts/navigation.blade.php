@@ -53,7 +53,7 @@
             </a>
 
             <a href="{{route('alerts.index')}}" 
-               class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg text-gray-900 hover:bg-gray-100 transition-colors duration-200"
+               class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-colors duration-200 {{ request()->routeIs('alerts.*') ? 'bg-blue-50 text-blue-700' : 'text-gray-900 hover:bg-gray-100' }}"
                :class="{ 'justify-center': sidebarMinimized }">
                 <i class="fas fa-bell text-lg w-5"></i>
                 <span :class="{ 'lg:hidden': sidebarMinimized }" class="ml-3 transition-opacity duration-300">Alerts</span>
@@ -126,22 +126,49 @@
                         <div
                             x-show="open"
                             @click.away="open = false"
-                            class="absolute right-0 mt-2 w-96 bg-white border border-gray-200 rounded-lg shadow-lg z-50"
+                            class="absolute right-0 mt-2 w-96 bg-white border border-gray-200 rounded-lg shadow-lg z-50 alerts-dropdown"
                         >
-                            <div class="p-3 font-semibold border-b">Recent Alerts</div>
+                            <div class="p-3 font-semibold border-b flex items-center justify-between">
+                                <span>Recent Alerts</span>
+                                <a href="{{ route('alerts.index') }}" class="text-sm text-blue-600 hover:text-blue-800">View All</a>
+                            </div>
                             <ul class="max-h-64 overflow-y-auto divide-y">
                                 @forelse($recentAlerts as $alert)
-                                    <li class="px-4 py-2 text-sm text-gray-700">
-                                        <i class="fas fa-exclamation-triangle text-red-500 mr-1"></i>
-                                        <span class="font-semibold text-red-600 uppercase">
-                                            {{ $alert->alert_type }}
-                                        </span>
-                                        on server #{{ $alert->server_id }}<br>
-                                        <span class="text-xs text-gray-700">{{ $alert->alert_message }}</span><br>
-                                        <span class="text-xs text-gray-400">{{ \Carbon\Carbon::parse($alert->alert_time)->diffForHumans() }}</span>
+                                    <li class="px-4 py-3 text-sm">
+                                        <div class="flex items-start justify-between">
+                                            <div class="flex-1">
+                                                <div class="flex items-center space-x-2">
+                                                    <svg class="h-4 w-4 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                                                    </svg>
+                                                    <span class="font-semibold text-red-600 uppercase text-xs">
+                                                        {{ $alert->alert_type }}
+                                                    </span>
+                                                    <span class="px-2 py-1 text-xs rounded-full {{ $alert->severity_color }}">
+                                                        {{ ucfirst($alert->severity) }}
+                                                    </span>
+                                                </div>
+                                                <div class="mt-1">
+                                                    <div class="text-gray-900 font-medium">{{ $alert->server->name ?? 'Server #' . $alert->server_id }}</div>
+                                                    <div class="text-gray-600">{{ $alert->alert_message }}</div>
+                                                    <div class="text-xs text-gray-400 mt-1">{{ $alert->alert_time->diffForHumans() }}</div>
+                                                </div>
+                                            </div>
+                                            <button 
+                                                onclick="resolveAlertFromDropdown({{ $alert->id }})"
+                                                class="ml-2 px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 transition-colors duration-200 flex items-center"
+                                            >
+                                                Resolve
+                                            </button>
+                                        </div>
                                     </li>
                                 @empty
-                                    <li class="px-4 py-2 text-sm text-gray-500">No recent alerts</li>
+                                    <li class="px-4 py-3 text-sm text-gray-500 text-center">
+                                        <svg class="inline h-5 w-5 text-green-500 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                        </svg>
+                                        No recent alerts
+                                    </li>
                                 @endforelse
                             </ul>
                         </div>
@@ -200,6 +227,95 @@ document.addEventListener('alpine:init', () => {
         }
     }));
 });
+
+// Initialize global toast manager
+document.addEventListener('DOMContentLoaded', function() {
+    if (typeof Alpine !== 'undefined') {
+        window.toastManager = Alpine.data('toastManager')();
+    }
+});
+
+// Function to resolve alert from dropdown
+function resolveAlertFromDropdown(alertId) {
+    // Show loading state
+    const button = event.target;
+    const originalText = button.innerHTML;
+    button.innerHTML = '<div class="inline-block animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>';
+    button.disabled = true;
+    
+    fetch(`/alerts/${alertId}/resolve`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Show success toast
+            if (window.toastManager) {
+                window.toastManager.success('Success', 'Alert resolved successfully');
+            }
+            
+            // Remove the alert from the dropdown immediately
+            const alertElement = button.closest('li');
+            if (alertElement) {
+                alertElement.style.transition = 'all 0.3s ease';
+                alertElement.style.opacity = '0';
+                alertElement.style.transform = 'translateX(100%)';
+                setTimeout(() => {
+                    alertElement.remove();
+                    
+                    // Check if dropdown is empty
+                    const dropdown = document.querySelector('.alerts-dropdown ul');
+                    if (dropdown && dropdown.children.length === 0) {
+                        dropdown.innerHTML = '<li class="px-4 py-3 text-sm text-gray-500 text-center"><svg class="inline h-5 w-5 text-green-500 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>No recent alerts</li>';
+                    }
+                }, 300);
+            }
+            
+            // Dispatch Livewire events to refresh components
+            if (typeof Livewire !== 'undefined') {
+                Livewire.dispatch('alert-resolved', { alertId: alertId });
+                Livewire.dispatch('alertResolvedFromDropdown', { alertId: alertId });
+                Livewire.dispatch('refresh-alerts');
+            }
+            
+            // Dispatch custom DOM event
+            document.dispatchEvent(new CustomEvent('alert-resolved-globally', {
+                detail: { alertId: alertId }
+            }));
+            
+            // Call global refresh function if available
+            if (typeof window.refreshAlertsTable === 'function') {
+                window.refreshAlertsTable();
+            }
+            
+        } else {
+            // Show error toast
+            if (window.toastManager) {
+                window.toastManager.error('Error', data.message || 'Failed to resolve alert');
+            }
+            
+            // Restore button
+            button.innerHTML = originalText;
+            button.disabled = false;
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        
+        // Show error toast
+        if (window.toastManager) {
+            window.toastManager.error('Error', 'Network error occurred while resolving alert');
+        }
+        
+        // Restore button
+        button.innerHTML = originalText;
+        button.disabled = false;
+    });
+}
 </script>
 
 

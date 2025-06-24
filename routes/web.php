@@ -20,7 +20,10 @@ Route::get('/install', function() {
 });
 
 Route::get('/', function () {
-    return redirect()->route('dashboard');
+    if (auth()->check()) {
+        return redirect()->route('dashboard');
+    }
+    return redirect()->route('login');
 });
 
 // Protected routes requiring authentication
@@ -36,22 +39,73 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 
-
-    //Alert Route
-    // Commented out due to missing controller
-    // Route::post('/alerts/trigger', [AlertController::class, 'trigger']);
+    // Alert Routes
+    Route::post('/alerts/trigger', [App\Http\Controllers\AlertController::class, 'trigger'])->name('alerts.trigger');
+    Route::post('/alerts/{id}/resolve', [App\Http\Controllers\AlertController::class, 'resolve'])->name('alerts.resolve');
+    Route::get('/alerts/recent', [App\Http\Controllers\AlertController::class, 'recent'])->name('alerts.recent');
+    
+    // Alert Management Page
+    Route::get('/alerts', [App\Http\Controllers\AlertController::class, 'index'])->name('alerts.index');
 
     //Test Alert Route
     Route::get('/test-alerts', function () {
         return view('test-alerts');
     });
+    
+    // Test Alert AJAX Routes
+    Route::post('/test-alerts/simulate', function () {
+        try {
+            $alertService = new \App\Services\AlertMonitoringService();
+            $servers = \App\Models\Server::with('alertThresholds')->get();
+            
+            if ($servers->isEmpty()) {
+                return response()->json(['error' => 'No servers found'], 404);
+            }
 
-
-    //Route::get('/alerts', \App\Livewire\AlertsTable::class)->name('alerts.index');
-
-    Route::get('/alerts', function () {
-        return view('alerts');
-    })->name('alerts.index');
+            // Find a server with active thresholds
+            $server = $servers->filter(function($server) {
+                return $server->alertThresholds->where('is_active', true)->count() > 0;
+            })->first();
+            
+            if (!$server) {
+                return response()->json(['error' => 'No servers with active thresholds found'], 404);
+            }
+            
+            $result = $alertService->simulateCriticalAlert($server);
+            
+            if ($result) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Critical alert simulated successfully!',
+                    'alert_id' => $result['alert']->id ?? null,
+                    'server_name' => $server->name,
+                    'alert_type' => $result['alert']->alert_type ?? null,
+                    'alert_message' => $result['alert']->alert_message ?? null,
+                    'metric_value' => $result['alert']->metric_value ?? null,
+                    'email_sent' => true
+                ]);
+            } else {
+                return response()->json(['error' => 'Failed to simulate alert'], 500);
+            }
+        } catch (\Exception $e) {
+            \Log::error('Alert simulation error: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to simulate alert: ' . $e->getMessage()], 500);
+        }
+    });
+    
+    Route::post('/test-alerts/monitor', function () {
+        $alertService = new \App\Services\AlertMonitoringService();
+        $results = $alertService->checkAllThresholds();
+        $summary = $alertService->getSystemHealthSummary();
+        
+        return response()->json([
+            'success' => true,
+            'message' => 'Monitoring check completed',
+            'alerts_triggered' => count($results),
+            'results' => $results,
+            'summary' => $summary
+        ]);
+    });
 
     // Logs Routes
     Route::get('/logs', [LogController::class, 'index'])->name('logs.index');
@@ -70,6 +124,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // User Route
     Route::get('/user', [UserController::class, 'index'])->name('user');
 
+<<<<<<< Updated upstream
     // Server selection routes
     Route::get('/toggle-server/{id}', [ServerController::class, 'toggleServerSelection'])->name('toggle.server');
     Route::get('/select-all-servers', [ServerController::class, 'selectAllServers'])->name('select.all.servers');
@@ -77,6 +132,53 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     // Chart data route
     Route::get('/chart-data', [ServerController::class, 'getChartData'])->name('chart.data');
+=======
+    // Test route for alert resolution
+    Route::get('/test-resolve', function () {
+        return view('test-resolve');
+    })->middleware(['auth', 'verified']);
+});
+
+// Test route without authentication for alert testing
+Route::get('/test-alerts-direct', function () {
+    $alerts = App\Models\Alert::with(['server', 'threshold'])->paginate(10);
+    return view('test-alerts-direct', compact('alerts'));
+});
+
+Route::post('/test-resolve/{id}', function ($id) {
+    try {
+        $alert = App\Models\Alert::findOrFail($id);
+        
+        if ($alert->status === 'resolved') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Alert is already resolved.'
+            ]);
+        }
+
+        $alert->update([
+            'status' => 'resolved',
+            'resolved_at' => now(),
+            'resolved_by' => 1, // Default admin user
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Alert resolved successfully.'
+        ]);
+        
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Failed to resolve alert: ' . $e->getMessage()
+        ], 500);
+    }
+});
+
+// Quick login page for testing
+Route::get('/quick-login', function () {
+    return view('quick-login');
+>>>>>>> Stashed changes
 });
 
 require __DIR__.'/auth.php';
