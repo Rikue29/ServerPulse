@@ -108,38 +108,23 @@ class Dashboard extends Component
     }
 
    public function toggleServerSelection($serverId)
-{
-    $serverId = (int) $serverId;
+    {
+        $serverId = (int) $serverId;
 
-    if (!is_array($this->selectedServers)) {
-        $this->selectedServers = [];
+        if (!is_array($this->selectedServers)) {
+            $this->selectedServers = [];
+        }
+
+        // Toggle the server ID in the array
+        if (($key = array_search($serverId, $this->selectedServers)) !== false) {
+            unset($this->selectedServers[$key]);
+        } else {
+            $this->selectedServers[] = $serverId;
+        }
+
+        // Re-index the array to be safe
+        $this->selectedServers = array_values($this->selectedServers);
     }
-
-    $this->selectedServers = array_map('intval', $this->selectedServers);
-
-    if (in_array($serverId, $this->selectedServers)) {
-        $this->selectedServers = array_values(array_diff($this->selectedServers, [$serverId]));
-    } else {
-        $this->selectedServers[] = $serverId;
-    }
-
-    if (count($this->selectedServers) === 1) {
-        $this->selectedServerId = $this->selectedServers[0];
-    } elseif (count($this->selectedServers) > 1) {
-        $this->selectedServerId = 'multiple';
-    } else {
-        $this->selectedServerId = null;
-    }
-
-    // ✅ Now update the list after the selection is final
-    $this->selectedServersList = Server::whereIn('id', $this->selectedServers)->get();
-
-    session(['selected_servers' => $this->selectedServers]);
-    session(['selected_server_id' => $this->selectedServerId]);
-
-    $this->dispatch('serverSelectionChanged', selectedServers: $this->selectedServers);
-    $this->dispatch('chartDataUpdated');
-}
 
 
     public function selectAllServers()
@@ -280,10 +265,10 @@ class Dashboard extends Component
 
     public function getSelectedServerProperty()
     {
-        if (!$this->selectedServerId || $this->selectedServerId === 'all' || $this->selectedServerId === 'multiple') {
-            return null;
+        if ($this->selectedServerId && $this->selectedServerId !== 'all' && $this->selectedServerId !== 'multiple') {
+            return Server::find($this->selectedServerId);
         }
-        return Server::find($this->selectedServerId);
+        return null;
     }
 
     public function getSelectedServersListProperty()
@@ -679,46 +664,42 @@ class Dashboard extends Component
 
     public function testAddServer($serverId = 1)
     {
-        \Log::info('testAddServer called', ['serverId' => $serverId]);
-        
-        if (!is_array($this->selectedServers)) {
-            $this->selectedServers = [];
-        }
-        
         if (!in_array($serverId, $this->selectedServers)) {
-            $this->selectedServers[] = (int) $serverId;
-            \Log::info('Server added via test method', ['serverId' => $serverId, 'newSelection' => $this->selectedServers]);
+            $this->selectedServers[] = $serverId;
+            $this->selectedServers = array_values($this->selectedServers);
+            
+            // Manually refresh the list
+            $this->selectedServersList = Server::whereIn('id', $this->selectedServers)->get();
+            
+            \Log::info('Server added for testing', [
+                'selectedServers' => $this->selectedServers,
+                'listCount' => $this->selectedServersList->count()
+            ]);
         }
-        
-        // Force a re-render
-        $this->dispatch('$refresh');
-        
-        // Show an alert
-        $this->dispatch('showAlert', message: 'Test: Server ' . $serverId . ' added. Selected: ' . json_encode($this->selectedServers));
     }
 
     public function render()
     {
-        
-        $this->selectedServersList = Server::whereIn('id', $this->selectedServers)->get();
+        // Explicitly build the list of selected server models for the view.
+        $selectedServersList = empty($this->selectedServers)
+            ? new Collection()
+            : Server::whereIn('id', $this->selectedServers)->get();
 
         return view('livewire.dashboard', [
+            'servers' => $this->servers,
             'totalServers' => $this->totalServers,
             'activeServers' => $this->activeServers,
             'offlineServers' => $this->offlineServers,
             'totalLogs' => $this->totalLogs,
-            'healthScore' => $this->healthScore,
-            'recentLogs' => $this->recentLogs,
-            'serverStatuses' => $this->serverStatuses,
             'logLevels' => $this->logLevels,
+            'serverStatuses' => $this->serverStatuses,
             'topServersByLogs' => $this->topServersByLogs,
             'alertThresholds' => $this->alertThresholds,
             'offlineServersList' => $this->offlineServersList,
             'criticalLogs' => $this->criticalLogs,
-            'servers' => Server::all(), // full list
-            'selectedServers' => $this->selectedServers,
-            'selectedServersList' => $this->selectedServersList,
+            'healthScore' => $this->healthScore,
             'serverPerformanceChartData' => $this->serverPerformanceChartData,
+            'selectedServersList' => $selectedServersList,
         ]);
     }
 } 

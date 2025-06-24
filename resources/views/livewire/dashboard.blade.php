@@ -225,11 +225,7 @@
 </div>
 
         </div>
-        <div class="bg-yellow-100 p-2 text-sm">
-    Selected Servers: {{ json_encode($selectedServers) }}<br>
-    Selected List Count: {{ $selectedServersList->count() }}<br>
-    Server Names: {{ $selectedServersList->pluck('name')->join(', ') }}
-</div>
+        
 
 
         <!-- Server Cards Display -->
@@ -243,19 +239,8 @@
             </div>
         @else
             <!-- Show All Servers when none selected -->
-            <div class="mb-4 p-3 bg-green-50 border border-green-200 rounded text-sm">
-                <strong>No servers selected - showing all servers:</strong><br>
-                Selected Servers Array: {{ json_encode($selectedServers) }}<br>
-                Selected Servers Count: {{ count($selectedServers) }}<br>
-                Total Servers Available: {{ $servers->count() }}<br>
-                Selected Servers Types: {{ json_encode(array_map('gettype', $selectedServers)) }}<br>
-                Last Update: {{ now()->format('H:i:s') }}<br>
-            </div>
-            
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                @foreach($servers as $server)
-                    @include('livewire.partials.server-card', ['server' => $server])
-                @endforeach
+            <div class="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-center">
+                <p class="text-gray-700">Select a server from the filter above to view its details.</p>
             </div>
         @endif
     </div>

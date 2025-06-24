@@ -322,14 +322,33 @@ function updateAnalyticsPage(eventData) {
     }
     networkThroughputHistory[serverId].push(actualThroughput);
     console.log(`💾 Stored new values - Timestamp: ${currentTimestamp}, Bytes: ${networkRx + networkTx}`);
+
+    // Calculate disk I/O throughput centrally
+    let diskIOThroughput = 0;
+    const currentDiskIORead = parseInt(data.disk_io_read || 0, 10);
+    const currentDiskIOWrite = parseInt(data.disk_io_write || 0, 10);
+
+    if (lastDiskIORead[serverId] !== undefined && lastDiskIOWrite[serverId] !== undefined && lastUpdateTime[serverId] !== undefined) {
+        const timeDiff = (currentTimestamp - lastUpdateTime[serverId]) / 1000;
+        if (timeDiff > 0) {
+            const readDiff = currentDiskIORead >= lastDiskIORead[serverId] ? currentDiskIORead - lastDiskIORead[serverId] : currentDiskIORead;
+            const writeDiff = currentDiskIOWrite >= lastDiskIOWrite[serverId] ? currentDiskIOWrite - lastDiskIOWrite[serverId] : currentDiskIOWrite;
+            const totalDiff = readDiff + writeDiff;
+            diskIOThroughput = totalDiff / timeDiff / 1024 / 1024; // MB/s
+        }
+    }
+
+    lastDiskIORead[serverId] = currentDiskIORead;
+    lastDiskIOWrite[serverId] = currentDiskIOWrite;
+    lastUpdateTime[serverId] = currentTimestamp;
     
     console.log('🔄 Updating summary cards...');
     // Update summary cards
-    updateSummaryCards(data, actualThroughput);
+    updateSummaryCards(data, actualThroughput, diskIOThroughput);
     
     console.log('🔄 Updating performance chart...');
     // Update performance chart
-    updatePerformanceChart(data, actualThroughput);
+    updatePerformanceChart(data, actualThroughput, diskIOThroughput);
     
     console.log('✅ Analytics page update completed');
 }
@@ -764,7 +783,7 @@ function handleServerSelectionChange() {
 }
 
 // Function to update performance chart
-function updatePerformanceChart(eventData, actualThroughput) {
+function updatePerformanceChart(eventData, actualThroughput, diskIOThroughput) {
     // Check if chart is initialized
     if (!window.performanceChart) {
         console.log('⚠️ Chart not initialized yet, or not on analytics page');
@@ -781,11 +800,23 @@ function updatePerformanceChart(eventData, actualThroughput) {
         // Try to parse and format as H:i:s
         const date = new Date(eventData.created_at);
         if (!isNaN(date.getTime())) {
-            labelTime = date.toLocaleTimeString('en-GB', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            labelTime = date.toLocaleTimeString('en-US', {
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: true,
+                timeZone: 'Asia/Kuala_Lumpur'
+            });
         }
     }
     if (!labelTime) {
-        labelTime = new Date().toLocaleTimeString('en-GB', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        labelTime = new Date().toLocaleTimeString('en-US', {
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: true,
+            timeZone: 'Asia/Kuala_Lumpur'
+        });
     }
     
     // Initialize history for this server if not exists
@@ -800,54 +831,6 @@ function updatePerformanceChart(eventData, actualThroughput) {
     if (networkThroughputHistory[serverId].length > 50) {
         networkThroughputHistory[serverId].shift();
     }
-    
-    // Calculate disk I/O throughput
-    let diskIOThroughput = 0;
-    // Parse values as integers to ensure proper calculation
-    const currentDiskIORead = parseInt(eventData.disk_io_read || 0, 10);
-    const currentDiskIOWrite = parseInt(eventData.disk_io_write || 0, 10);
-    
-    if (lastDiskIORead[serverId] !== undefined && lastDiskIOWrite[serverId] !== undefined && lastUpdateTime[serverId] !== undefined) {
-        // Use the same timestamp as network calculations for consistency
-        const timeDiff = (currentTimestamp - lastUpdateTime[serverId]) / 1000;
-        
-        // Handle reset case (if current values are smaller than previous)
-        let readDiff, writeDiff;
-        
-        if (currentDiskIORead < lastDiskIORead[serverId]) {
-            console.log(`⚠️ Disk IO Read counter reset detected - using current value`);
-            readDiff = currentDiskIORead;
-        } else {
-            readDiff = currentDiskIORead - lastDiskIORead[serverId];
-        }
-        
-        if (currentDiskIOWrite < lastDiskIOWrite[serverId]) {
-            console.log(`⚠️ Disk IO Write counter reset detected - using current value`);
-            writeDiff = currentDiskIOWrite;
-        } else {
-            writeDiff = currentDiskIOWrite - lastDiskIOWrite[serverId];
-        }
-        
-        const totalDiff = readDiff + writeDiff;
-        
-        if (timeDiff > 0) {
-            diskIOThroughput = totalDiff / timeDiff / 1024 / 1024; // MB/s
-            console.log(`💾 Disk I/O throughput: ${totalDiff} bytes / ${timeDiff} seconds = ${diskIOThroughput.toFixed(2)} MB/s`);
-            
-            // Cap extreme values that might be calculation errors
-            if (diskIOThroughput > 1000) {
-                console.log(`⚠️ Disk I/O value too high (${diskIOThroughput.toFixed(2)} MB/s), capping at 1000 MB/s`);
-                diskIOThroughput = 1000;
-            }
-        } else {
-            console.log(`⚠️ Invalid time difference for disk I/O calculation: ${timeDiff}`);
-        }
-    }
-    
-    lastDiskIORead[serverId] = currentDiskIORead;
-    lastDiskIOWrite[serverId] = currentDiskIOWrite;
-    // Store the timestamp for future calculations
-    lastUpdateTime[serverId] = currentTimestamp;
     
     // Update chart data
     const chart = window.performanceChart;
@@ -895,7 +878,7 @@ function updatePerformanceChart(eventData, actualThroughput) {
     // Network Activity
     if (datasets[2] && datasets[2].data) {
         ensureMaxPoints(datasets[2]);
-        datasets[2].data.push(calculateNetworkActivity(eventData));
+        datasets[2].data.push(calculateNetworkActivity(actualThroughput));
     }
     
     // Disk I/O
@@ -1261,7 +1244,7 @@ function calculateNetworkActivity(throughput) {
 }
 
 // Function to update summary cards
-function updateSummaryCards(data, actualThroughput) {
+function updateSummaryCards(data, actualThroughput, diskIOThroughput) {
     console.log('🔄 Updating summary cards with data:', data);
     // Update CPU Usage
     const cpuCard = document.querySelector('[data-metric="cpu-usage"] .metric-value');
@@ -1284,11 +1267,9 @@ function updateSummaryCards(data, actualThroughput) {
     }
     // Update Disk I/O
     const diskIOCard = document.querySelector('[data-metric="disk-io"] .metric-value');
-    if (diskIOCard && data.disk_io !== undefined) {
-        // Show more decimal places for small values
-        const diskIO = parseFloat(data.disk_io);
-        diskIOCard.textContent = diskIO < 1 ? diskIO.toFixed(3) : diskIO.toFixed(1);
-        console.log('✅ Updated Disk I/O card to:', diskIO);
+    if (diskIOCard) {
+        diskIOCard.textContent = diskIOThroughput.toFixed(2) + ' MB/s';
+        console.log('✅ Updated Disk I/O card to:', diskIOThroughput);
     }
     // Update Disk Usage
     const diskCard = document.querySelector('[data-metric="disk-usage"] .metric-value');
