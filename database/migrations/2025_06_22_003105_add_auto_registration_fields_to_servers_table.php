@@ -12,7 +12,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('servers', function (Blueprint $table) {
-            $table->string('auth_token', 128)->nullable()->after('agent_token');
+            $table->string('auth_token', 128)->nullable();
             $table->boolean('auto_registered')->default(false)->after('auth_token');
             $table->timestamp('last_seen')->nullable()->after('auto_registered');
         });

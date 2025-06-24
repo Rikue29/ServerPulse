@@ -162,8 +162,12 @@ Write-Output "$cpu|$memory|$disk|$uptime|$network|$diskIO"
                 $previousTx = $server->network_tx ?? 0;
                 
                 if ($rx < $previousRx || $tx < $previousTx) {
+                    // Server has likely restarted - reset counters
                     $rx = 0;
                     $tx = 0;
+                    // Reset running_since to now since this indicates a restart
+                    $server->running_since = now();
+                    $server->save();
                 }
 
                 // Handle disk I/O counter reset (server restart/offline)
@@ -171,8 +175,19 @@ Write-Output "$cpu|$memory|$disk|$uptime|$network|$diskIO"
                 $previousWrite = $server->disk_io_write ?? 0;
                 
                 if ($ioRead < $previousRead || $ioWrite < $previousWrite) {
+                    // Server has likely restarted - reset counters
                     $ioRead = 0;
                     $ioWrite = 0;
+                }
+
+                // Check if uptime indicates a server restart
+                $previousUptime = $this->parseUptimeToSeconds($server->system_uptime ?? '0h 0m 0s');
+                $currentUptime = $uptimeSeconds;
+                
+                if ($currentUptime < $previousUptime) {
+                    // Server has restarted - reset running_since
+                    $server->running_since = now();
+                    $server->save();
                 }
 
                 $metrics = [
@@ -470,10 +485,12 @@ Write-Output "$cpu|$memory|$disk|$uptime|$network|$diskIO"
         $ioRead = 0;
         $ioWrite = 0;
         foreach ($lines as $line) {
-            if (preg_match('/(sd|vd|nvme[0-9]n[0-9])\s/i', $line)) {
+            if (preg_match('/(sd|vd[ab]|nvme[0-9]n[0-9])\s/i', $line)) {
                 $parts = preg_split('/\s+/', trim($line));
-                $ioRead += (int)$parts[5] * 512;
-                $ioWrite += (int)$parts[9] * 512;
+                if (count($parts) >= 14) {  // Ensure we have enough fields
+                    $ioRead += (int)$parts[5] * 512;  // sectors read * 512 bytes
+                    $ioWrite += (int)$parts[9] * 512;  // sectors written * 512 bytes
+                }
             }
         }
 
@@ -607,36 +624,14 @@ Write-Output "$cpu|$memory|$disk|$uptime|$network|$diskIO"
 
     private function formatUptimeFromSeconds(float $seconds): string
     {
-        if ($seconds < 1) {
-            return '0s';
-        }
+        // Round seconds to prevent fluctuations
+        $seconds = round($seconds);
+        
+        $hours = floor($seconds / 3600);
+        $minutes = floor(($seconds % 3600) / 60);
+        $remainingSeconds = $seconds % 60;
 
-        $days = floor($seconds / (3600 * 24));
-        $secondsPart = $seconds % (3600 * 24);
-        $hours = floor($secondsPart / 3600);
-        $secondsPart %= 3600;
-        $minutes = floor($secondsPart / 60);
-        $remainingSeconds = floor($secondsPart % 60);
-
-        $parts = [];
-        if ($days > 0) {
-            $parts[] = "{$days}d";
-        }
-        if ($hours > 0) {
-            $parts[] = "{$hours}h";
-        }
-        if ($minutes > 0) {
-            $parts[] = "{$minutes}m";
-        }
-        if ($remainingSeconds > 0) {
-            $parts[] = "{$remainingSeconds}s";
-        }
-
-        if (empty($parts)) {
-            return '0s';
-        }
-
-        return implode(' ', $parts);
+        return sprintf("%dh %dm %ds", $hours, $minutes, $remainingSeconds);
     }
 
     /**
@@ -671,5 +666,27 @@ Write-Output "$cpu|$memory|$disk|$uptime|$network|$diskIO"
         } catch (Exception $e) {
             return 999.9;
         }
+    }
+
+    /**
+     * Parse uptime string to seconds
+     */
+    private function parseUptimeToSeconds(string $uptime): float
+    {
+        $hours = 0;
+        $minutes = 0;
+        $seconds = 0;
+
+        if (preg_match('/(\d+)h/', $uptime, $matches)) {
+            $hours = (int)$matches[1];
+        }
+        if (preg_match('/(\d+)m/', $uptime, $matches)) {
+            $minutes = (int)$matches[1];
+        }
+        if (preg_match('/(\d+)s/', $uptime, $matches)) {
+            $seconds = (int)$matches[1];
+        }
+
+        return ($hours * 3600) + ($minutes * 60) + $seconds;
     }
 }

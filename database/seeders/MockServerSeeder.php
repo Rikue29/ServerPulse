@@ -7,6 +7,7 @@ use App\Models\Server;
 use App\Models\Log;
 use App\Models\AlertThreshold;
 use Carbon\Carbon;
+use App\Models\User;
 
 class MockServerSeeder extends Seeder
 {
@@ -15,6 +16,8 @@ class MockServerSeeder extends Seeder
      */
     public function run(): void
     {
+        $user = User::first();
+
         // Create mock servers
         $servers = [
             [
@@ -173,7 +176,7 @@ class MockServerSeeder extends Seeder
         ];
 
         foreach ($servers as $serverData) {
-            $serverData['created_by'] = 1; // Assuming user ID 1 exists
+            $serverData['created_by'] = $user->id;
             $server = Server::create($serverData);
             
             // Create logs for each server

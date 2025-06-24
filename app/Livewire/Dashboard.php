@@ -5,6 +5,7 @@ namespace App\Livewire;
 use App\Models\Server;
 use App\Models\Log;
 use App\Models\AlertThreshold;
+use App\Models\PerformanceLog;
 use Livewire\Component;
 use Livewire\WithPagination;
 use Illuminate\Support\Facades\DB;
@@ -34,26 +35,26 @@ class Dashboard extends Component
     {
         \Log::info('Dashboard component mounting...');
         
-        
         \Log::info('Selected server ID from session:', ['selectedServerId' => $this->selectedServerId]);
 
-
+        // Initialize from session
     $this->selectedServers = session('selected_servers', []);
     $this->selectedServerId = session('selected_server_id');
+        
+        // Initialize selectedServersList safely
+        $this->selectedServersList = new Collection();
+        if (!empty($this->selectedServers)) {
     $this->selectedServersList = Server::whereIn('id', $this->selectedServers)->get();
-
-
+        }
         
         // Initialize selectedServers array
         if ($this->selectedServerId && $this->selectedServerId !== 'all') {
             $this->selectedServers = [$this->selectedServerId];
-        } else {
-            $this->selectedServers = session('selected_servers', []);
         }
         \Log::info('Selected servers initialized:', ['selectedServers' => $this->selectedServers]);
         
-        // If no server was previously selected, set default server to first available server
-        if (!$this->selectedServerId && empty($this->selectedServers)) {
+        // Only try to set default server if we have any servers
+        if ((!$this->selectedServerId && empty($this->selectedServers)) && Server::count() > 0) {
             $firstServer = Server::first();
             if ($firstServer) {
                 $this->selectedServerId = $firstServer->id;
@@ -66,8 +67,10 @@ class Dashboard extends Component
         session(['selected_server_id' => $this->selectedServerId]);
         session(['selected_servers' => $this->selectedServers]);
 
-        // 🔧 Add this to update selected list!
+        // Update selected list safely
+        if (!empty($this->selectedServers)) {
         $this->selectedServersList = Server::whereIn('id', $this->selectedServers)->get();
+        }
         
         \Log::info('Dashboard component mounted successfully', [
             'selectedServerId' => $this->selectedServerId,
@@ -341,14 +344,6 @@ class Dashboard extends Component
         // Get performance data for the selected server
         $performanceData = $this->getPerformanceData($serverId, $this->selectedTimeRange, $intervals);
         
-        \Log::info('Performance data generated', [
-            'serverId' => $serverId,
-            'dataCount' => count($performanceData),
-            'firstData' => $performanceData[0] ?? 'no data',
-            'labels' => array_column($performanceData, 'label'),
-            'timeRange' => $this->selectedTimeRange
-        ]);
-        
         $labels = [];
         $cpuData = [];
         $memoryData = [];
@@ -399,39 +394,44 @@ class Dashboard extends Component
         $timeRange = $this->getTimeRange();
         $intervals = $this->getIntervals();
         
-        \Log::info('Generating aggregated chart data for selected servers', [
-            'selectedTimeRange' => $this->selectedTimeRange,
-            'intervals' => $intervals,
-            'selectedServers' => $this->selectedServers
-        ]);
+        $endDate = now();
+        $startDate = match($this->selectedTimeRange) {
+            'day' => $endDate->copy()->subDay(),
+            'week' => $endDate->copy()->subWeek(),
+            'month' => $endDate->copy()->subMonth(),
+            default => $endDate->copy()->subDay(),
+        };
+
+        $logs = PerformanceLog::whereIn('server_id', $this->selectedServers)
+            ->whereBetween('created_at', [$startDate, $endDate])
+            ->orderBy('created_at', 'asc')
+            ->get();
+
+        if ($logs->isEmpty()) {
+            return [
+                'labels' => [],
+                'datasets' => []
+            ];
+        }
+
+        $groupedLogs = $logs->groupBy(function($log) {
+            $format = match($this->selectedTimeRange) {
+                'day' => 'Y-m-d H:00',
+                'week' => 'Y-m-d',
+                'month' => 'Y-m-d',
+                default => 'Y-m-d H:00',
+            };
+            return $log->created_at->format($format);
+        });
         
         $labels = [];
         $avgCpuData = [];
         $avgMemoryData = [];
         
-        // Generate labels based on time range
-        for ($i = $intervals - 1; $i >= 0; $i--) {
-            $timestamp = $this->getTimestampForInterval($i, $this->selectedTimeRange);
-            $labels[] = $this->getLabelForTimeRange($timestamp, $this->selectedTimeRange);
-        }
-        
-        // Get selected servers
-        $selectedServerList = $this->selectedServersList;
-        
-        // Generate aggregated data for each time interval
-        foreach ($labels as $index => $label) {
-            $totalCpu = 0;
-            $totalMemory = 0;
-            $serverCount = 0;
-            
-            foreach ($selectedServerList as $server) {
-                $totalCpu += $server->cpu_usage ?? 50;
-                $totalMemory += $server->ram_usage ?? 60;
-                $serverCount++;
-            }
-            
-            $avgCpuData[] = $serverCount > 0 ? round($totalCpu / $serverCount, 1) : 0;
-            $avgMemoryData[] = $serverCount > 0 ? round($totalMemory / $serverCount, 1) : 0;
+        foreach ($groupedLogs as $key => $group) {
+            $labels[] = $key;
+            $avgCpuData[] = round($group->avg('cpu_usage'), 2);
+            $avgMemoryData[] = round($group->avg('ram_usage'), 2);
         }
         
         return [
@@ -461,78 +461,40 @@ class Dashboard extends Component
 
     private function getPerformanceData($serverId, $timeRange, $intervals)
     {
-        $data = [];
-        $server = Server::find($serverId);
-        
-        if (!$server) {
-            return $data;
-        }
-        
-        // Generate realistic performance data based on the server's current metrics
-        for ($i = $intervals - 1; $i >= 0; $i--) {
-            $timestamp = $this->getTimestampForInterval($i, $timeRange);
-            
-            // Base the data on the server's current metrics with some variation
-            $baseCpu = $server->cpu_usage ?? 50;
-            $baseMemory = $server->ram_usage ?? 60;
-            
-            // Add realistic variation based on time range
-            $variation = match($timeRange) {
-                'day' => rand(-15, 15) / 100, // Less variation for hourly data
-                'week' => rand(-25, 25) / 100, // Medium variation for daily data
-                'month' => rand(-35, 35) / 100, // More variation for monthly data
-                default => rand(-20, 20) / 100
+        $endDate = now();
+        $startDate = match($timeRange) {
+            'day' => $endDate->copy()->subDay(),
+            'week' => $endDate->copy()->subWeek(),
+            'month' => $endDate->copy()->subMonth(),
+            default => $endDate->copy()->subDay(),
+        };
+
+        $query = PerformanceLog::where('server_id', $serverId)
+            ->whereBetween('created_at', [$startDate, $endDate]);
+
+        $logs = $query->orderBy('created_at', 'asc')->get();
+
+        if ($logs->isEmpty()) {
+            return [];
+                }
+
+        // Group logs by time intervals (e.g., hourly for 'day' view)
+        $groupedLogs = $logs->groupBy(function($log) use ($timeRange) {
+            $format = match($timeRange) {
+                'day' => 'Y-m-d H:00', // Group by hour for the day
+                'week' => 'Y-m-d',     // Group by day for the week
+                'month' => 'Y-m-d',    // Group by day for the month
+                default => 'Y-m-d H:00',
             };
-            
-            $cpu = max(0, min(100, $baseCpu + ($baseCpu * $variation)));
-            $memory = max(0, min(100, $baseMemory + ($baseMemory * $variation)));
-            
-            // Add realistic patterns based on time range
-            if ($timeRange === 'day') {
-                // Hourly patterns (higher usage during business hours)
-                $hour = $timestamp->hour;
-                if ($hour >= 9 && $hour <= 17) {
-                    $cpu = min(100, $cpu * 1.2);
-                    $memory = min(100, $memory * 1.1);
-                } else if ($hour >= 22 || $hour <= 6) {
-                    $cpu = max(0, $cpu * 0.7);
-                    $memory = max(0, $memory * 0.8);
-                }
-            } elseif ($timeRange === 'week') {
-                // Weekly patterns (higher usage on weekdays)
-                $dayOfWeek = $timestamp->dayOfWeek;
-                if ($dayOfWeek >= 1 && $dayOfWeek <= 5) { // Monday to Friday
-                    $cpu = min(100, $cpu * 1.15);
-                    $memory = min(100, $memory * 1.05);
-                } else { // Weekend
-                    $cpu = max(0, $cpu * 0.8);
-                    $memory = max(0, $memory * 0.85);
-                }
-            } elseif ($timeRange === 'month') {
-                // Monthly patterns (slight seasonal variation)
-                $month = $timestamp->month;
-                if ($month >= 3 && $month <= 5) { // Spring
-                    $cpu = min(100, $cpu * 1.05);
-                    $memory = min(100, $memory * 1.02);
-                } elseif ($month >= 6 && $month <= 8) { // Summer
-                    $cpu = min(100, $cpu * 1.1);
-                    $memory = min(100, $memory * 1.08);
-                } elseif ($month >= 9 && $month <= 11) { // Fall
-                    $cpu = min(100, $cpu * 1.03);
-                    $memory = min(100, $memory * 1.01);
-                } else { // Winter
-                    $cpu = max(0, $cpu * 0.95);
-                    $memory = max(0, $memory * 0.98);
-                }
-            }
-            
-            // Create appropriate labels based on time range
-            $label = $this->getLabelForTimeRange($timestamp, $timeRange);
-            
+            return $log->created_at->format($format);
+        });
+
+        $data = [];
+        foreach ($groupedLogs as $key => $group) {
             $data[] = [
-                'label' => $label,
-                'cpu' => round($cpu, 1),
-                'memory' => round($memory, 1)
+                'label' => $key,
+                'cpu' => round($group->avg('cpu_usage'), 2),
+                'memory' => round($group->avg('ram_usage'), 2),
             ];
         }
         

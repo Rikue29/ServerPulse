@@ -88,8 +88,7 @@ class MonitorServer extends Command
             
             $server->save();
 
-            // Create a performance log for every check with correct timezone
-            $currentTime = Carbon::now('Asia/Kuala_Lumpur')->utc();
+            // Create a performance log for every check
             \App\Models\PerformanceLog::create([
                 'server_id' => $server->id,
                 'cpu_usage' => $metrics['cpu_usage'] ?? 0,
@@ -100,8 +99,6 @@ class MonitorServer extends Command
                 'disk_io_read' => $metrics['disk_io_read'] ?? 0,
                 'disk_io_write' => $metrics['disk_io_write'] ?? 0,
                 'response_time' => $responseTime, // Store the response time in the performance log
-                'created_at' => $currentTime,
-                'updated_at' => $currentTime,
             ]);
 
             // 3. Check for threshold breaches

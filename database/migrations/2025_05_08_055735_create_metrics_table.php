@@ -11,14 +11,17 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('metrics', function (Blueprint $table) {
+        Schema::create('performance_logs', function (Blueprint $table) {
             $table->id();
             $table->foreignId('server_id')->constrained()->onDelete('cascade');
             $table->float('cpu_usage')->nullable();
             $table->float('ram_usage')->nullable();
             $table->float('disk_usage')->nullable();
+            $table->bigInteger('network_rx')->nullable();
+            $table->bigInteger('network_tx')->nullable();
+            $table->bigInteger('disk_io_read')->nullable();
+            $table->bigInteger('disk_io_write')->nullable();
             $table->float('response_time')->nullable();
-            $table->timestamp('recorded_at');
             $table->timestamps();
         });
     }
@@ -28,6 +31,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('metrics');
+        Schema::dropIfExists('performance_logs');
     }
 };

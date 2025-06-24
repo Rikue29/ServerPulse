@@ -20,11 +20,15 @@ class AnalyticsController extends Controller
 
         $summary = [
             'system_performance' => $selected_server->cpu_usage ?? 0,
-            'network_health' => $network_health_summary['health_score'],
-            'network_activity' => $network_health_summary['activity_level'],
-            'current_network_activity' => 0, // Will be updated below
+            'network_health' => 0,
+            'network_activity' => 0,
+            'current_network_activity' => 0,
             'storage_usage' => $selected_server->disk_usage ?? 0,
             'resource_allocation' => $selected_server->ram_usage ?? 0,
+            'network_throughput' => 0,
+            'response_time' => 0,
+            'system_uptime' => $selected_server->system_uptime ?? '0h 0m 0s',
+            'disk_io' => 0
         ];
 
         // For the graph, we'll get the last 24 hours of performance logs for a specific server
@@ -53,7 +57,7 @@ class AnalyticsController extends Controller
             foreach ($performanceLogs as $log) {
                 // Use the actual log timestamp in 'H:i:s' format for the X-axis
                 $logTime = $log->created_at->setTimezone('Asia/Kuala_Lumpur');
-                $chart_data['labels'][] = $logTime->format('H:i:s');
+                $chart_data['labels'][] = $logTime->format('h:i:s A');
                 $chart_data['cpu_load'][] = $log->cpu_usage ?? 0;
                 $chart_data['memory_usage'][] = $log->ram_usage ?? 0;
                 $chart_data['disk_usage'][] = $log->disk_usage ?? 0;
@@ -119,10 +123,16 @@ class AnalyticsController extends Controller
                 // Convert system uptime string to hours if possible
                 $uptimeHours = 0;
                 if ($log->system_uptime) {
-                    // Attempt to parse uptime string (e.g. "18h 2m 13s")
+                    // Improved uptime parsing to handle edge cases
                     preg_match('/(\d+)h\s+(\d+)m\s+(\d+)s/', $log->system_uptime, $matches);
                     if (count($matches) >= 4) {
-                        $uptimeHours = intval($matches[1]) + (intval($matches[2]) / 60) + (intval($matches[3]) / 3600);
+                        // Round to 2 decimal places to prevent minor fluctuations
+                        $uptimeHours = round(
+                            intval($matches[1]) + 
+                            (intval($matches[2]) / 60) + 
+                            (intval($matches[3]) / 3600),
+                            2
+                        );
                     }
                 }
                 $chart_data['system_uptime'][] = $uptimeHours;
@@ -189,5 +199,50 @@ class AnalyticsController extends Controller
             'ping_response' => $server->status === 'online' ? 1 : 0,
             'total_transfer' => ($server->network_rx ?? 0) + ($server->network_tx ?? 0)
         ];
+    }
+
+    public function getServerStatus(Request $request)
+    {
+        $selected_server_id = $request->input('server_id', Server::first()->id ?? null);
+        $selected_server = Server::find($selected_server_id);
+
+        // Get the two most recent logs to calculate disk I/O
+        $recentLogs = PerformanceLog::where('server_id', $selected_server_id)
+            ->orderBy('created_at', 'desc')
+            ->limit(2)
+            ->get();
+
+        $disk_io = 0;
+        if ($recentLogs->count() == 2) {
+            $current = $recentLogs->first();
+            $previous = $recentLogs->last();
+            $time_diff = $current->created_at->diffInSeconds($previous->created_at);
+            
+            if ($time_diff > 0) {
+                $read_diff = ($current->disk_io_read ?? 0) - ($previous->disk_io_read ?? 0);
+                $write_diff = ($current->disk_io_write ?? 0) - ($previous->disk_io_write ?? 0);
+                $disk_io = ($read_diff + $write_diff) / $time_diff / 1024 / 1024; // Convert to MB/s
+            }
+        }
+
+        $summary = [
+            'system_performance' => $selected_server->cpu_usage ?? 0,
+            'network_health' => 0,
+            'network_activity' => 0,
+            'current_network_activity' => 0,
+            'storage_usage' => $selected_server->disk_usage ?? 0,
+            'resource_allocation' => $selected_server->ram_usage ?? 0,
+            'network_throughput' => 0,
+            'response_time' => 0,
+            'system_uptime' => $selected_server->system_uptime ?? '0h 0m 0s',
+            'disk_io' => round($disk_io, 2)
+        ];
+
+        // Get performance logs for chart data
+        $performanceLogs = PerformanceLog::where('server_id', $selected_server_id)
+            ->orderBy('created_at', 'desc')
+            ->limit(100)
+            ->get()
+            ->reverse();
     }
 }

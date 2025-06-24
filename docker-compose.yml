@@ -19,11 +19,18 @@ services:
       dockerfile: docker/php/Dockerfile
     volumes:
       - .:/var/www/html/
+      - ./docker/php/opcache.ini:/usr/local/etc/php/conf.d/opcache.ini
+      - ./docker/php/custom.ini:/usr/local/etc/php/conf.d/custom.ini
     networks:
       - webapp-network
     environment:
       - PHP_FPM_LISTEN=0.0.0.0:9000
       - PHP_ERROR_REPORTING=E_ALL
+      - "DB_HOST=mysql"
+      - "DB_PORT=3306"
+      - "DB_DATABASE=serverpulse"
+      - "DB_USERNAME=user"
+      - "DB_PASSWORD=password"
 
   node:
     image: node:18
@@ -32,7 +39,6 @@ services:
     working_dir: /var/www/html
     command: >
       bash -c "npm install
-      && npm run build
       && npm run dev"
     networks:
       - webapp-network
@@ -44,9 +50,13 @@ services:
 
   mysql:
     image: mysql:8.0
+    command: --default-time-zone=+08:00
     environment:
       MYSQL_ROOT_PASSWORD: ariq12345    # Password for root user
-      MYSQL_DATABASE: serverpulse_db    # Database will be created on startup
+      MYSQL_DATABASE: serverpulse    # Database will be created on startup
+      MYSQL_USER: user
+      MYSQL_PASSWORD: password
+      TZ: Asia/Kuala_Lumpur
     ports:
       - "3306:3306"
     volumes:
@@ -66,88 +76,6 @@ services:
       - mysql
     networks:
       - webapp-network
-
-  # Scheduler Service
-  scheduler:
-    image: php:8.2-fpm
-    volumes:
-      - .:/var/www/html
-    networks:
-      - webapp-network
-    command: >
-      bash -c "apt-get update && apt-get install -y 
-      libzip-dev git unzip
-      && docker-php-ext-install pdo pdo_mysql zip opcache
-      && curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
-      && cd /var/www/html 
-      && composer install --no-interaction
-      && php artisan config:cache
-      && while true; do php artisan schedule:run --verbose; sleep 60; done"
-    depends_on:
-      - mysql
-      - php
-      
-  # Downtime Broadcaster Service (runs at high frequency)
-  downtime-broadcaster:
-    image: php:8.2-fpm
-    volumes:
-      - .:/var/www/html
-    networks:
-      - webapp-network
-    command: >
-      bash -c "apt-get update && apt-get install -y 
-      libzip-dev git unzip
-      && docker-php-ext-install pdo pdo_mysql zip opcache
-      && curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
-      && cd /var/www/html 
-      && composer install --no-interaction
-      && php artisan config:cache
-      && while true; do php artisan server:update-offline-downtime; sleep 3; done"
-    restart: unless-stopped
-    depends_on:
-      - mysql
-      - php
-
-  # Queue Worker Service
-  queue:
-    image: php:8.2-fpm
-    volumes:
-      - .:/var/www/html
-    networks:
-      - webapp-network
-    command: >
-      bash -c "apt-get update && apt-get install -y \
-      libzip-dev git unzip procps \
-      && docker-php-ext-install pdo pdo_mysql zip opcache \
-      && curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer \
-      && cd /var/www/html \
-      && composer install --no-interaction \
-      && php artisan queue:work --queue=default,broadcasting --sleep=3 --tries=3 --timeout=60"
-    restart: unless-stopped
-    depends_on:
-      - mysql
-      - php
-
-  # Monitor Worker Service (for real-time updates)
-  monitor:
-    image: php:8.2-fpm
-    volumes:
-      - .:/var/www/html
-    networks:
-      - webapp-network
-    command: >
-      bash -c "apt-get update && apt-get install -y \
-      libzip-dev git unzip procps \
-      && docker-php-ext-install pdo pdo_mysql zip opcache \
-      && curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer \
-      && cd /var/www/html \
-      && composer install --no-interaction \
-      && php artisan config:cache \
-      && while true; do php artisan server:check-status --all; sleep 5; done"
-    restart: unless-stopped
-    depends_on:
-      - mysql
-      - php
 
 volumes:
   mysql_data:

@@ -1247,401 +1247,73 @@ function updatePerformanceChart(eventData, actualThroughput) {
     }
 }
 
+// Function to calculate network activity level (0-100) based on throughput
+function calculateNetworkActivity(throughput) {
+    // Convert throughput (KB/s) to activity level
+    if (throughput > 1000) { // > 1MB/s
+        return 100;
+    } else if (throughput > 100) { // > 100KB/s
+        return 60;
+    } else if (throughput > 10) { // > 10KB/s
+        return 30;
+    }
+    return Math.max(0, Math.min(10, throughput)); // 0-10 for very low activity
+}
+
 // Function to update summary cards
-function updateSummaryCards(eventData, actualThroughput) {
-    console.log('🔄 Updating summary cards with data:', eventData);
-    
-    // Update CPU Usage card
-    const cpuCard = document.querySelector('.bg-white.rounded-lg.shadow-sm.border.border-gray-200.p-6:nth-child(1) .text-3xl');
+function updateSummaryCards(data, actualThroughput) {
+    console.log('🔄 Updating summary cards with data:', data);
+    // Update CPU Usage
+    const cpuCard = document.querySelector('[data-metric="cpu-usage"] .metric-value');
     if (cpuCard) {
-        cpuCard.textContent = parseFloat(eventData.cpu_usage || 0).toFixed(1) + '%';
-        console.log('✅ Updated CPU card to:', eventData.cpu_usage);
+        cpuCard.textContent = parseFloat(data.cpu_usage).toFixed(1) + '%';
+        console.log('✅ Updated CPU card to:', data.cpu_usage);
     }
-    
-    // Update Network Activity card
-    const networkActivityCard = document.querySelector('.bg-white.rounded-lg.shadow-sm.border.border-gray-200.p-6:nth-child(2) .text-3xl');
-    if (networkActivityCard) {
-        // Calculate network activity as a numeric value (0-100 scale or throughput)
-        // Use the same logic as the graph for consistency
-        const activityValue = calculateNetworkActivity(eventData);
-        // Optionally, format as percentage or throughput (Kbps/Mbps)
-        networkActivityCard.textContent = activityValue + '%';
-        
-        // Update progress bar
-        const progressBar = networkActivityCard.closest('.bg-white').querySelector('.bg-green-500');
-        if (progressBar) {
-            progressBar.style.width = activityValue + '%';
-        }
-        console.log('✅ Updated Network Activity card to:', activityValue);
-    }
-    
-    // Update Storage Usage card
-    const storageCard = document.querySelector('.bg-white.rounded-lg.shadow-sm.border.border-gray-200.p-6:nth-child(3) .text-3xl');
-    if (storageCard) {
-        storageCard.textContent = parseFloat(eventData.disk_usage || 0).toFixed(1) + '%';
-        console.log('✅ Updated Storage card to:', eventData.disk_usage);
-    }
-    
-    // Update Memory Usage card
-    const memoryCard = document.querySelector('.bg-white.rounded-lg.shadow-sm.border.border-gray-200.p-6:nth-child(4) .text-3xl');
+    // Update Memory Usage
+    const memoryCard = document.querySelector('[data-metric="memory-usage"] .metric-value');
     if (memoryCard) {
-        memoryCard.textContent = parseFloat(eventData.ram_usage || 0).toFixed(1) + '%';
-        console.log('✅ Updated Memory card to:', eventData.ram_usage);
+        memoryCard.textContent = parseFloat(data.ram_usage).toFixed(1) + '%';
+        console.log('✅ Updated Memory card to:', data.ram_usage);
     }
-    
-    // Update additional metrics cards
-    const additionalCards = document.querySelectorAll('.grid.grid-cols-1.md\\:grid-cols-2.lg\\:grid-cols-4.gap-6.mb-6:nth-child(2) .bg-white.rounded-lg.shadow-sm.border.border-gray-200.p-6');
-    
-    // Disk Usage card
-    if (additionalCards[0]) {
-        const diskUsageText = additionalCards[0].querySelector('.text-3xl');
-        if (diskUsageText) {
-            diskUsageText.textContent = parseFloat(eventData.disk_usage || 0).toFixed(1) + '%';
-            console.log('✅ Updated additional Disk Usage card to:', eventData.disk_usage);
-        }
+    // Update Network Activity
+    const networkActivityCard = document.querySelector('[data-metric="network-activity"] .metric-value');
+    if (networkActivityCard) {
+        const activityLevel = calculateNetworkActivity(actualThroughput);
+        networkActivityCard.textContent = activityLevel.toFixed(0) + '%';
+        console.log('✅ Updated Network Activity card to:', activityLevel);
     }
-    
-    // Network Throughput card - COMPLETELY REBUILT UPDATE
-    if (additionalCards[1]) {
-        const throughputText = additionalCards[1].querySelector('.text-3xl');
-        if (throughputText) {
-            // EMERGENCY DIRECT APPROACH - FORCE SYNTHETIC VALUE IF NEEDED
-            
-            // First try to use the calculated throughput
-            let throughputValue;
-            
-            // DEBUG: Show what we're working with
-            console.log('🚨 DEBUG - actualThroughput:', actualThroughput, 
-                'type:', typeof actualThroughput,
-                'isValid:', (!isNaN(actualThroughput) && actualThroughput > 0));
-                
-            if (!isNaN(actualThroughput) && actualThroughput > 0) {
-                // Use the calculated value
-                throughputValue = actualThroughput;
-                console.log('✅ Using calculated throughput:', throughputValue.toFixed(2), 'KB/s');
-            } else {
-                // EMERGENCY FALLBACK - Synthesize a value from the raw network data
-                const rx = parseInt(eventData.network_rx) || 0;
-                const tx = parseInt(eventData.network_tx) || 0;
-                const total = rx + tx;
-                
-                // Create a synthetic value based on the order of magnitude of the data
-                throughputValue = total / 100000; // Scale appropriately
-                
-                // Ensure we have at least something visible
-                throughputValue = Math.max(10, throughputValue);
-                
-                console.log('🚨 EMERGENCY FALLBACK - Using synthetic throughput:', 
-                    throughputValue.toFixed(2), 'KB/s', 
-                    'based on rx:', rx, 'tx:', tx);
-            }
-            
-            // FORMAT FOR DISPLAY - KB/s or MB/s
-            let displayValue, unit;
-            if (throughputValue >= 1000) {
-                displayValue = (throughputValue / 1024).toFixed(1);
-                unit = 'MB/s';
-            } else {
-                displayValue = throughputValue.toFixed(1);
-                unit = 'KB/s';
-            }
-            
-            // DIRECT DOM UPDATE - Force the text to change
-            throughputText.textContent = displayValue;
-            
-            // Update the unit
-            const unitElement = additionalCards[1].querySelector('.text-xs.text-gray-500.mt-1');
-            if (unitElement) {
-                unitElement.textContent = unit;
-            }
-            
-            // Make the change very visually obvious
-            throughputText.style.transition = 'all 0.3s';
-            throughputText.style.backgroundColor = 'rgba(0, 255, 0, 0.4)';
-            throughputText.style.padding = '4px 8px';
-            throughputText.style.borderRadius = '4px';
-            throughputText.style.fontWeight = 'bold';
-            
-            // Reset style after animation
-            setTimeout(() => {
-                throughputText.style.backgroundColor = 'transparent';
-                throughputText.style.fontWeight = '';
-            }, 800);
-            
-            // Log the update
-            console.log(`🚨 [EMERGENCY UPDATE] Network Throughput card set to: ${displayValue} ${unit}`);
-        } else {
-            console.error('🚨 Could not find the network throughput text element');
-        }
-    } else {
-        console.error('🚨 Could not find the network throughput card');
+    // Update Disk I/O
+    const diskIOCard = document.querySelector('[data-metric="disk-io"] .metric-value');
+    if (diskIOCard && data.disk_io !== undefined) {
+        // Show more decimal places for small values
+        const diskIO = parseFloat(data.disk_io);
+        diskIOCard.textContent = diskIO < 1 ? diskIO.toFixed(3) : diskIO.toFixed(1);
+        console.log('✅ Updated Disk I/O card to:', diskIO);
     }
-    
-    // Response Time card
-    if (additionalCards[2]) {
-        const responseTimeText = additionalCards[2].querySelector('.text-3xl');
-        if (responseTimeText) {
-            const responseValue = parseFloat(eventData.response_time || 0);
-            responseTimeText.textContent = responseValue.toFixed(1);
-            console.log('✅ Updated Response Time card to:', responseValue.toFixed(2), 'ms');
-        }
+    // Update Disk Usage
+    const diskCard = document.querySelector('[data-metric="disk-usage"] .metric-value');
+    if (diskCard && data.disk_usage !== undefined) {
+        diskCard.textContent = parseFloat(data.disk_usage).toFixed(1) + '%';
+        console.log('✅ Updated Disk Usage card to:', data.disk_usage);
     }
-    
-    // System Uptime card
-    if (additionalCards[3]) {
-        const uptimeText = additionalCards[3].querySelector('.text-3xl');
-        if (uptimeText) {
-            // Enhanced logic with improved source selection for uptime display
-            if (eventData.status === 'online') {
-                console.group(`🔍 Analytics Summary Card Uptime Debug [Server ${eventData.server_id}]`);
-                
-                let uptimeDisplay = null;
-                let source = 'none';
-                const serverId = eventData.server_id;
-                
-                // Debug available sources
-                console.log('current_uptime:', eventData.current_uptime, typeof eventData.current_uptime);
-                console.log('system_uptime:', eventData.system_uptime, typeof eventData.system_uptime);
-                if (eventData.raw_stats) console.log('raw_stats.uptime:', eventData.raw_stats.uptime);
-                
-                // Create a prioritized list of uptime sources
-                const uptimeSources = [];
-                
-                // 1. Try system_uptime if available and meaningful (higher priority for Kali Linux)
-                if (eventData.system_uptime && eventData.system_uptime !== '0s') {
-                    // If system_uptime is already formatted and looks valid, use it directly
-                    if (typeof eventData.system_uptime === 'string') {
-                        // Check if it has 'h' or 'd' to ensure it's a meaningful value
-                        const hasHoursOrDays = eventData.system_uptime.includes('d') || 
-                                            eventData.system_uptime.includes('h');
-                        
-                        // Or if it has a meaningful uptime in minutes
-                        const minutesMatch = eventData.system_uptime.match(/(\d+)m/);
-                        const hasSignificantMinutes = minutesMatch && parseInt(minutesMatch[1]) > 5;
-                        
-                        if (hasHoursOrDays || hasSignificantMinutes) {
-                            uptimeSources.push({
-                                type: 'system_uptime_string',
-                                value: eventData.system_uptime,
-                                priority: 10,
-                                formatted: eventData.system_uptime
-                            });
-                            console.log(`✅ Added system_uptime string with value "${eventData.system_uptime}"`);
-                        }
-                    }
-                    // Otherwise try to parse it as a number if it's substantial
-                    else if (typeof eventData.system_uptime === 'number' && eventData.system_uptime > 60) {
-                        uptimeSources.push({
-                            type: 'system_uptime_number',
-                            value: eventData.system_uptime,
-                            priority: 10,
-                            formatted: formatUptime(eventData.system_uptime)
-                        });
-                        console.log(`✅ Added system_uptime number: ${eventData.system_uptime}s`);
-                    }
-                }
-                
-                // 2. Try current_uptime if available AND meaningful
-                if (eventData.current_uptime !== null && eventData.current_uptime !== undefined && eventData.current_uptime !== '') {
-                    const uptimeSeconds = parseFloat(eventData.current_uptime);
-                    // Only use current_uptime if it has a substantial value (fixes Kali Linux issue)
-                    if (!isNaN(uptimeSeconds) && uptimeSeconds > 60) {
-                        uptimeSources.push({
-                            type: 'current_uptime',
-                            value: uptimeSeconds,
-                            priority: 20, // Highest priority for significant values
-                            formatted: formatUptime(uptimeSeconds)
-                        });
-                        console.log(`✅ Added current_uptime: ${uptimeSeconds}s`);
-                    } else {
-                        console.log(`⚠️ Skipping small/invalid current_uptime: ${uptimeSeconds}`);
-                    }
-                }
-                
-                // 3. Try raw_stats.uptime if available
-                if (eventData.raw_stats && eventData.raw_stats.uptime) {
-                    const uptimeSeconds = parseFloat(eventData.raw_stats.uptime);
-                    if (!isNaN(uptimeSeconds) && uptimeSeconds > 60) {
-                        uptimeSources.push({
-                            type: 'raw_stats.uptime',
-                            value: uptimeSeconds,
-                            priority: 5,
-                            formatted: formatUptime(uptimeSeconds)
-                        });
-                        console.log(`✅ Added raw_stats.uptime: ${uptimeSeconds}s`);
-                    }
-                }
-                
-                // 4. Check manually tracked uptime
-                if (window.manualUptimeTracking && window.manualUptimeTracking[serverId]) {
-                    const tracking = window.manualUptimeTracking[serverId];
-                    if (tracking.baseSeconds) {
-                        const now = Date.now();
-                        const elapsedSeconds = Math.floor((now - tracking.lastUpdate) / 1000);
-                        const totalSeconds = tracking.baseSeconds + elapsedSeconds;
-                        
-                        uptimeSources.push({
-                            type: 'manual_tracking',
-                            value: totalSeconds,
-                            priority: 1, // Low priority
-                            formatted: formatUptime(totalSeconds)
-                        });
-                        console.log(`✅ Added manual tracking: ${totalSeconds}s`);
-                    }
-                }
-                
-                // 5. Check chart data for most recent value
-                if (window.performanceChart) {
-                    const datasets = window.performanceChart.data.datasets;
-                    if (datasets && datasets[7] && datasets[7].data && datasets[7].data.length > 0) {
-                        // Get the last non-null value
-                        let lastValue = null;
-                        for (let i = datasets[7].data.length - 1; i >= 0; i--) {
-                            if (datasets[7].data[i] !== null && datasets[7].data[i] > 0) {
-                                lastValue = datasets[7].data[i];
-                                break;
-                            }
-                        }
-                        
-                        if (lastValue) {
-                            // Convert from hours to seconds and format
-                            const uptimeSeconds = lastValue * 3600;
-                            uptimeSources.push({
-                                type: 'chart_data',
-                                value: uptimeSeconds,
-                                priority: 1, // Low priority
-                                formatted: formatUptime(uptimeSeconds)
-                            });
-                            console.log(`✅ Added chart data: ${lastValue} hours`);
-                        }
-                    }
-                }
-                
-                // 6. If there's a previous displayed value, add it as an option
-                if (uptimeText.textContent && uptimeText.textContent !== 'N/A') {
-                    // Parse existing display, increment by a few seconds
-                    const existingSeconds = parseUptimeToSeconds(uptimeText.textContent);
-                    if (existingSeconds > 0) {
-                        const newSeconds = existingSeconds + 5; // Add 5 seconds
-                        uptimeSources.push({
-                            type: 'previous_display_incremented',
-                            value: newSeconds,
-                            priority: 0, // Lowest priority
-                            formatted: formatUptime(newSeconds)
-                        });
-                        console.log(`✅ Added incremented previous display: ${uptimeText.textContent} + 5s`);
-                    }
-                }
-                
-                // 7. Add default value as last resort
-                uptimeSources.push({
-                    type: 'default_value',
-                    value: 36000, // 10 hours in seconds
-                    priority: -10, // Lowest possible priority
-                    formatted: '10h 0m 0s'
-                });
-                console.log(`✅ Added default value: 10h 0m 0s`);
-                
-                // Sort sources by priority
-                uptimeSources.sort((a, b) => b.priority - a.priority);
-                console.log(`Total uptime sources available: ${uptimeSources.length}`);
-                
-                // Select the first valid source
-                for (const src of uptimeSources) {
-                    if (src.formatted && src.formatted !== 'N/A' && src.formatted !== '0s') {
-                        uptimeDisplay = src.formatted;
-                        source = src.type;
-                        console.log(`✅ Selected uptime source: ${source} → "${uptimeDisplay}"`);
-                        break;
-                    }
-                }
-                
-                // Update the display
-                if (uptimeDisplay) {
-                    uptimeText.textContent = uptimeDisplay;
-                    console.log(`✅ Updated Analytics Uptime to: ${uptimeDisplay} (source: ${source})`);
-                    
-                    // Update unit text
-                    const unitElement = additionalCards[3].querySelector('.text-xs.text-gray-500.mt-1');
-                    if (unitElement) {
-                        unitElement.textContent = 'Uptime';
-                    }
-                    
-                    // Visual feedback for update
-                    uptimeText.style.transition = 'all 0.5s';
-                    uptimeText.style.backgroundColor = source.includes('default') ? 
-                        'rgba(255, 255, 0, 0.1)' : // Yellow for default values
-                        'rgba(0, 255, 0, 0.1)';    // Green for real values
-                    setTimeout(() => {
-                        uptimeText.style.backgroundColor = 'transparent';
-                    }, 800);
-                    
-                    // Store for manual tracking
-                    if (!window.manualUptimeTracking) {
-                        window.manualUptimeTracking = {};
-                    }
-                    
-                    if (!window.manualUptimeTracking[serverId]) {
-                        window.manualUptimeTracking[serverId] = {};
-                    }
-                    
-                    // Get uptime seconds from our selected source
-                    let uptimeSeconds = 0;
-                    for (const src of uptimeSources) {
-                        if (src.type === source) {
-                            uptimeSeconds = src.value;
-                            break;
-                        }
-                    }
-                    
-                    window.manualUptimeTracking[serverId].lastUpdate = Date.now();
-                    window.manualUptimeTracking[serverId].display = uptimeDisplay;
-                    window.manualUptimeTracking[serverId].source = source;
-                    window.manualUptimeTracking[serverId].baseSeconds = uptimeSeconds || 
-                                                                      parseUptimeToSeconds(uptimeDisplay);
-                }
-                
-                console.groupEnd();
-                
-                // Store for manual tracking if needed
-                if (uptimeDisplay !== 'N/A' && uptimeDisplay !== '0s') {
-                    if (!window.manualUptimeTracking) {
-                        window.manualUptimeTracking = {};
-                    }
-                    
-                    if (!window.manualUptimeTracking[serverId]) {
-                        window.manualUptimeTracking[serverId] = {};
-                    }
-                    
-                    window.manualUptimeTracking[serverId].lastUpdate = Date.now();
-                    window.manualUptimeTracking[serverId].display = uptimeDisplay;
-                    window.manualUptimeTracking[serverId].source = source;
-                    window.manualUptimeTracking[serverId].baseSeconds = parseUptimeToSeconds(uptimeDisplay);
-                }
-            } else if (eventData.status === 'offline') {
-                // Server is offline - show current downtime
-                if (eventData.current_downtime !== null && eventData.current_downtime !== undefined) {
-                    const downtimeSeconds = parseFloat(eventData.current_downtime);
-                    const formattedDowntime = formatUptime(downtimeSeconds);
-                    uptimeText.textContent = formattedDowntime;
-                    console.log('✅ Updated Analytics Downtime to:', formattedDowntime, 
-                               '(from current_downtime:', downtimeSeconds, 'seconds)');
-                    
-                    // Update unit text to show it's downtime
-                    const unitElement = additionalCards[3].querySelector('.text-xs.text-gray-500.mt-1');
-                    if (unitElement) {
-                        unitElement.textContent = 'Downtime';
-                    }
-                } else {
-                    // No downtime data available
-                    uptimeText.textContent = 'N/A';
-                    console.log('⚠️ No downtime data available for offline server');
-                }
-            }
-        }
+    // Update Network Throughput
+    const throughputCard = document.querySelector('[data-metric="network-throughput"] .metric-value');
+    if (throughputCard) {
+        throughputCard.textContent = actualThroughput.toFixed(2) + ' KB/s';
+        console.log('✅ Updated Network Throughput card to:', actualThroughput);
     }
-    
-    console.log('✅ All summary cards updated successfully');
+    // Update Response Time
+    const responseTimeCard = document.querySelector('[data-metric="response-time"] .metric-value');
+    if (responseTimeCard && data.response_time !== undefined) {
+        responseTimeCard.textContent = parseFloat(data.response_time).toFixed(0) + ' ms';
+        console.log('✅ Updated Response Time card to:', data.response_time);
+    }
+    // Update System Uptime
+    const uptimeCard = document.querySelector('[data-metric="system-uptime"] .metric-value');
+    if (uptimeCard && data.system_uptime) {
+        uptimeCard.textContent = data.system_uptime;
+        console.log('✅ Updated System Uptime card to:', data.system_uptime);
+    }
 }
 
 // Add event listener for server selection change
@@ -1786,7 +1458,7 @@ window.debugUptimeValues = function(serverId) {
             if (uptimeCell) {
                 const uptimeText = uptimeCell.querySelector('span');
                 if (uptimeText) {
-                    console.log('� Current UI display value on servers page:', uptimeText.textContent);
+                    console.log(' Current UI display value on servers page:', uptimeText.textContent);
                 }
             }
             
@@ -1795,7 +1467,7 @@ window.debugUptimeValues = function(serverId) {
             if (statusCell) {
                 const uptimeInfoDiv = statusCell.querySelector('.server-uptime-info');
                 if (uptimeInfoDiv) {
-                    console.log('📊 Current UI status uptime:', uptimeInfoDiv.textContent);
+                    console.log(' Current UI status uptime:', uptimeInfoDiv.textContent);
                 }
             }
         }
@@ -1812,7 +1484,7 @@ window.debugUptimeValues = function(serverId) {
                 const uptimeCard = additionalCards[3];
                 const uptimeText = uptimeCard.querySelector('.text-3xl');
                 if (uptimeText) {
-                    console.log('📊 Current UI display value on analytics page:', uptimeText.textContent);
+                    console.log(' Current UI display value on analytics page:', uptimeText.textContent);
                 }
             }
         }

@@ -21,24 +21,24 @@
         <!-- Summary Cards -->
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
             <!-- System Performance -->
-            <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6" data-metric="cpu-usage">
                 <div class="flex items-center justify-between">
                     <h3 class="text-sm font-medium text-gray-500">CPU Usage</h3>
                     <i class="fas fa-chart-line text-blue-500"></i>
                 </div>
                 <div class="mt-4">
-                    <span class="text-3xl font-bold text-gray-900">{{ number_format($summary['system_performance'], 1) }}%</span>
+                    <span class="text-3xl font-bold text-gray-900 metric-value">{{ number_format($summary['system_performance'], 1) }}%</span>
                 </div>
                 <p class="text-xs text-gray-500 mt-1">Current</p>
             </div>
             <!-- Network Health -->
-            <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6" data-metric="network-activity">
                 <div class="flex items-center justify-between">
                     <h3 class="text-sm font-medium text-gray-500">Network Activity</h3>
                     <i class="fas fa-network-wired text-green-500"></i>
                 </div>
                 <div class="mt-4">
-                    <span class="text-3xl font-bold text-gray-900">{{ $summary['current_network_activity'] }}</span>
+                    <span class="text-3xl font-bold text-gray-900 metric-value">{{ $summary['current_network_activity'] }}</span>
                 </div>
                 <p class="text-xs text-gray-500 mt-1">Current Activity Level</p>
                 <div class="mt-2">
@@ -47,25 +47,25 @@
                     </div>
                 </div>
             </div>
-            <!-- Storage Usage -->
-            <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <!-- Disk I/O -->
+            <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6" data-metric="disk-io">
                 <div class="flex items-center justify-between">
-                    <h3 class="text-sm font-medium text-gray-500">Storage Usage</h3>
+                    <h3 class="text-sm font-medium text-gray-500">Disk I/O</h3>
                     <i class="fas fa-hdd text-yellow-500"></i>
                 </div>
                 <div class="mt-4">
-                    <span class="text-3xl font-bold text-gray-900">{{ number_format($summary['storage_usage'], 1) }}%</span>
+                    <span class="text-3xl font-bold text-gray-900 metric-value">{{ $summary['disk_io'] < 1 ? number_format($summary['disk_io'], 3) : number_format($summary['disk_io'], 1) }}</span>
                 </div>
-                <p class="text-xs text-gray-500 mt-1">Current</p>
+                <p class="text-xs text-gray-500 mt-1">MB/s</p>
             </div>
             <!-- Resource Allocation -->
-            <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6" data-metric="memory-usage">
                 <div class="flex items-center justify-between">
                     <h3 class="text-sm font-medium text-gray-500">Memory Usage</h3>
                     <i class="fas fa-cogs text-purple-500"></i>
                 </div>
                 <div class="mt-4">
-                    <span class="text-3xl font-bold text-gray-900">{{ number_format($summary['resource_allocation'], 1) }}%</span>
+                    <span class="text-3xl font-bold text-gray-900 metric-value">{{ number_format($summary['resource_allocation'], 1) }}%</span>
                 </div>
                 <p class="text-xs text-gray-500 mt-1">Current</p>
             </div>
@@ -74,24 +74,24 @@
         <!-- Additional Metrics Cards -->
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
             <!-- Disk Usage -->
-            <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6" data-metric="disk-usage">
                 <div class="flex items-center justify-between">
                     <h3 class="text-sm font-medium text-gray-500">Disk Usage</h3>
                     <i class="fas fa-hdd text-purple-500"></i>
                 </div>
                 <div class="mt-4">
-                    <span class="text-3xl font-bold text-gray-900">{{ number_format($summary['storage_usage'], 1) }}%</span>
+                    <span class="text-3xl font-bold text-gray-900 metric-value">{{ number_format($summary['storage_usage'], 1) }}%</span>
                 </div>
                 <p class="text-xs text-gray-500 mt-1">Current</p>
             </div>
             <!-- Network Throughput -->
-            <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6" data-metric="network-throughput">
                 <div class="flex items-center justify-between">
                     <h3 class="text-sm font-medium text-gray-500">Network Throughput</h3>
                     <i class="fas fa-tachometer-alt text-pink-500"></i>
                 </div>
                 <div class="mt-4">
-                    <span class="text-3xl font-bold text-gray-900">
+                    <span class="text-3xl font-bold text-gray-900 metric-value">
                         @if(!empty($chart_data['network_throughput']))
                             {{ number_format(end($chart_data['network_throughput']), 1) }}
                         @else
@@ -102,13 +102,13 @@
                 <p class="text-xs text-gray-500 mt-1">KB/s</p>
             </div>
             <!-- Response Time -->
-            <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6" data-metric="response-time">
                 <div class="flex items-center justify-between">
                     <h3 class="text-sm font-medium text-gray-500">Response Time</h3>
                     <i class="fas fa-clock text-green-500"></i>
                 </div>
                 <div class="mt-4">
-                    <span class="text-3xl font-bold text-gray-900">
+                    <span class="text-3xl font-bold text-gray-900 metric-value">
                         @if(!empty($chart_data['response_time']))
                             {{ number_format(end($chart_data['response_time']), 1) }}
                         @else
@@ -119,13 +119,13 @@
                 <p class="text-xs text-gray-500 mt-1">ms</p>
             </div>
             <!-- System Uptime -->
-            <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6" data-metric="system-uptime">
                 <div class="flex items-center justify-between">
                     <h3 class="text-sm font-medium text-gray-500">System Uptime</h3>
                     <i class="fas fa-server text-blue-500"></i>
                 </div>
                 <div class="mt-4">
-                    <span class="text-3xl font-bold text-gray-900">
+                    <span class="text-3xl font-bold text-gray-900 metric-value">
                         @if(!empty($chart_data['system_uptime']))
                             {{ number_format(end($chart_data['system_uptime']), 1) }}
                         @else
@@ -367,6 +367,7 @@
                 }
             });
 
+            function initializeGraphToggles() {
             // --- Define toggle mapping between checkbox IDs and dataset indices ---
             const toggleMapping = {
                 'cpuToggle': 0,
@@ -394,21 +395,8 @@
                     return;
                 }
 
-                // Set dataset visibility based on checkbox, respecting current state
-                const wasHidden = chart.data.datasets[datasetIndex].hidden;
-                const shouldShow = checkbox.checked;
-                
-                if (shouldShow) {
-                    chart.data.datasets[datasetIndex].hidden = false;
-                    if (wasHidden) {
-                        console.log(`✅ Dataset ${toggleId} (index ${datasetIndex}) shown`);
-                    }
-                } else {
-                    chart.data.datasets[datasetIndex].hidden = true;
-                    if (!wasHidden) {
-                        console.log(`❌ Dataset ${toggleId} (index ${datasetIndex}) hidden`);
-                    }
-                }
+                    // Set dataset visibility based on checkbox state
+                    chart.data.datasets[datasetIndex].hidden = !checkbox.checked;
                 
                 // Update chart with smooth transition animation
                 chart.update({
@@ -416,28 +404,22 @@
                     easing: 'easeOutQuad'
                 });
             }
-
-            // --- Restore toggle state from localStorage or use defaults ---
-            // Get saved filters or default to all toggles active
-            const savedActiveIds = loadActiveGraphs(serverId);
-            
-            // Always ensure all datasets are visible by default for first-time visitors
-            // For returning users, respect their saved preferences
-            const activeIds = savedActiveIds || toggleIds;
             
             // Initialize all checkboxes and dataset visibility
             toggleIds.forEach(toggleId => {
                 const checkbox = document.getElementById(toggleId);
                 if (checkbox) {
-                    // Always check all boxes by default if no saved preferences
-                    // Or set according to saved preferences if they exist
-                    checkbox.checked = savedActiveIds ? activeIds.includes(toggleId) : true;
+                        // Always ensure checkbox is checked on page load
+                        checkbox.checked = true;
+
+                        // Make sure dataset is visible
+                        const datasetIndex = toggleMapping[toggleId];
+                        if (chart.data.datasets[datasetIndex]) {
+                            chart.data.datasets[datasetIndex].hidden = false;
+                        }
                     
-                    // Initialize dataset visibility based on checkbox state
-                    syncCheckboxWithChart(toggleId);
-                    
-                    // Add change event listener with persistence
-                    checkbox.addEventListener('change', function() {
+                        // Add change event listener
+                        checkbox.addEventListener('change', function () {
                         // Update dataset visibility when checkbox changes
                         syncCheckboxWithChart(toggleId);
                         
@@ -447,12 +429,20 @@
                             return cb && cb.checked;
                         });
                         
-                        // Always save preferences to persist between sessions
+                            // Save preferences for future sessions
                         saveActiveGraphs(serverId, currentActiveIds);
-                        console.log(`🔄 Updated chart preferences for server ${serverId}`);
                     });
                 }
             });
+
+                // Force an update to ensure all datasets are visible
+                chart.update();
+            }
+
+            // Defer initialization until the window is fully loaded
+            window.onload = function() {
+                initializeGraphToggles();
+            };
         });
     </script>
 @endsection
