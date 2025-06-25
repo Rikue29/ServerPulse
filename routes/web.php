@@ -12,9 +12,6 @@ use App\Livewire\AlertsTable;
 use Illuminate\Support\Facades\Route;
 
 // Public agent installation routes (no auth required)
-// Commented out due to missing controller
-// Route::get('/agent/install.sh', [AutoRegisterController::class, 'installScript']);
-// Route::get('/agent/download', [AutoRegisterController::class, 'downloadAgent']);
 Route::get('/install', function() {
     return view('install-agent');
 });
@@ -43,16 +40,25 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/alerts/trigger', [App\Http\Controllers\AlertController::class, 'trigger'])->name('alerts.trigger');
     Route::post('/alerts/{id}/resolve', [App\Http\Controllers\AlertController::class, 'resolve'])->name('alerts.resolve');
     Route::get('/alerts/recent', [App\Http\Controllers\AlertController::class, 'recent'])->name('alerts.recent');
-    
-    // Alert Management Page
     Route::get('/alerts', [App\Http\Controllers\AlertController::class, 'index'])->name('alerts.index');
 
-    //Test Alert Route
+    // Test Routes
     Route::get('/test-alerts', function () {
         return view('test-alerts');
     });
     
-    // Test Alert AJAX Routes
+    Route::get('/test-resolve-debug', function () {
+        return view('test-resolve-debug');
+    });
+    
+    Route::get('/simple-test', function () {
+        return view('simple-test');
+    });
+    
+    Route::get('/simple-alert-test', function () {
+        return view('simple-alert-test-page');
+    });
+    
     Route::post('/test-alerts/simulate', function () {
         try {
             $alertService = new \App\Services\AlertMonitoringService();
@@ -62,7 +68,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
                 return response()->json(['error' => 'No servers found'], 404);
             }
 
-            // Find a server with active thresholds
             $server = $servers->filter(function($server) {
                 return $server->alertThresholds->where('is_active', true)->count() > 0;
             })->first();
@@ -117,14 +122,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Analytics Routes
     Route::get('/analytics', [AnalyticsController::class, 'index'])->name('analytics');
 
-
     // Settings Route
     Route::get('/settings', [SettingsController::class, 'index'])->name('settings');
 
     // User Route
     Route::get('/user', [UserController::class, 'index'])->name('user');
 
-<<<<<<< Updated upstream
     // Server selection routes
     Route::get('/toggle-server/{id}', [ServerController::class, 'toggleServerSelection'])->name('toggle.server');
     Route::get('/select-all-servers', [ServerController::class, 'selectAllServers'])->name('select.all.servers');
@@ -132,14 +135,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     // Chart data route
     Route::get('/chart-data', [ServerController::class, 'getChartData'])->name('chart.data');
-=======
-    // Test route for alert resolution
-    Route::get('/test-resolve', function () {
-        return view('test-resolve');
-    })->middleware(['auth', 'verified']);
 });
 
-// Test route without authentication for alert testing
+// Test routes without authentication for debugging
 Route::get('/test-alerts-direct', function () {
     $alerts = App\Models\Alert::with(['server', 'threshold'])->paginate(10);
     return view('test-alerts-direct', compact('alerts'));
@@ -175,10 +173,17 @@ Route::post('/test-resolve/{id}', function ($id) {
     }
 });
 
-// Quick login page for testing
 Route::get('/quick-login', function () {
     return view('quick-login');
->>>>>>> Stashed changes
+});
+
+Route::post('/quick-login', function () {
+    $user = App\Models\User::first();
+    if ($user) {
+        Auth::login($user);
+        return redirect('/alerts');
+    }
+    return redirect('/login');
 });
 
 require __DIR__.'/auth.php';

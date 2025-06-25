@@ -69,20 +69,70 @@ class Alert extends Model
 
     public function getSeverityAttribute(): string
     {
-        if ($this->metric_value >= 90) return 'critical';
-        if ($this->metric_value >= 80) return 'high';
-        if ($this->metric_value >= 70) return 'medium';
-        return 'low';
+        $value = $this->metric_value;
+        $type = strtolower($this->alert_type);
+        
+        // Apply specific thresholds based on metric type
+        switch ($type) {
+            case 'performance':
+            case 'cpu':
+                if ($value >= 90) return 'critical';
+                if ($value >= 75) return 'high';
+                if ($value >= 60) return 'medium';
+                return 'low';
+                
+            case 'memory':
+                if ($value >= 80) return 'high';
+                if ($value >= 65) return 'medium';
+                return 'low';
+                
+            case 'system':
+            case 'disk':
+                if ($value >= 75) return 'medium';
+                if ($value >= 60) return 'low';
+                return 'normal';
+                
+            default:
+                if ($value >= 90) return 'critical';
+                if ($value >= 75) return 'high';
+                if ($value >= 60) return 'medium';
+                return 'low';
+        }
     }
 
     public function getSeverityColorAttribute(): string
     {
         return match($this->severity) {
-            'critical' => 'bg-red-100 text-red-800',
-            'high' => 'bg-orange-100 text-orange-800',
-            'medium' => 'bg-yellow-100 text-yellow-800',
-            'low' => 'bg-blue-100 text-blue-800',
-            default => 'bg-gray-100 text-gray-800'
+            'critical' => 'bg-red-500 text-white',
+            'high' => 'bg-orange-500 text-white',
+            'medium' => 'bg-yellow-500 text-black',
+            'low' => 'bg-blue-500 text-white',
+            'normal' => 'bg-green-500 text-white',
+            default => 'bg-gray-500 text-white'
         };
+    }
+
+    public function getRowStyleAttribute(): string
+    {
+        if ($this->status === 'resolved') {
+            return 'bg-gray-50 opacity-75';
+        }
+        
+        $value = $this->metric_value;
+        
+        // Excessive values get prominent styling
+        if ($value >= 95) {
+            return 'bg-red-50 border-l-4 border-red-500 shadow-md';
+        }
+        
+        if ($this->severity === 'critical') {
+            return 'bg-red-25 border-l-2 border-red-400';
+        }
+        
+        if ($this->severity === 'high') {
+            return 'bg-orange-25 border-l-2 border-orange-400';
+        }
+        
+        return 'bg-white hover:bg-gray-50';
     }
 }
