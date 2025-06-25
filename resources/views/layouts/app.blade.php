@@ -36,7 +36,14 @@
         @livewireStyles
     </head>
     <body class="font-sans antialiased h-full">
-        @include('layouts.navigation')        
+        <!-- Critical Alert Banner -->
+        @include('components.critical-alert-banner')
+        
+        @include('layouts.navigation')
+        
+        <!-- Toast Notifications -->
+        @include('components.toast')
+        
         @livewireScripts
         @stack('scripts')
     </body>

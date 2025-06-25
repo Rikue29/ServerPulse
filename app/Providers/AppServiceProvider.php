@@ -27,7 +27,11 @@ class AppServiceProvider extends ServiceProvider
         Livewire::component('logs-table', LogsTable::class);
         Livewire::component('dashboard', Dashboard::class);
         View::composer('layouts.app', function ($view) {
-        $view->with('recentAlerts', Alert::latest()->take(5)->get());
-    });
+            $view->with('recentAlerts', Alert::with(['server', 'threshold'])
+                ->where('status', 'triggered')
+                ->orderBy('alert_time', 'desc')
+                ->take(5)
+                ->get());
+        });
     }
 }

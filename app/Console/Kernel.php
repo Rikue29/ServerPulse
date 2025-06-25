@@ -22,6 +22,12 @@ class Kernel extends ConsoleKernel
         
         // Broadcast server status every minute
         $schedule->command('monitor:server')->everyMinute();
+        
+        // Monitor alerts every 5 minutes
+        $schedule->command('alerts:monitor')
+            ->everyFiveMinutes()
+            ->withoutOverlapping()
+            ->runInBackground();
 
         // Run the dedicated offline server update command every 5 seconds
         // This ensures downtime counters update in real-time
