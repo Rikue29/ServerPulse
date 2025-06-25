@@ -1,0 +1,23 @@
+≡ƒÜÇ Creating comprehensive test alerts...
+
+Γ£à Using existing server: UBUNTU
+Γ£à Thresholds configured
+
+≡ƒº╣ Cleared existing triggered alerts
+
+
+In Connection.php line 822:
+                                                                                   
+  SQLSTATE[01000]: Warning: 1265 Data truncated for column 'alert_type' at row 1   
+  (Connection: mysql, SQL: insert into `alerts` (`server_id`, `threshold_id`, `al  
+  ert_type`, `alert_message`, `metric_value`, `alert_time`, `status`, `updated_at  
+  `, `created_at`) values (15, 41, cpu, ≡ƒö┤ CRITICAL: CPU usage has reached danger  
+  ous levels - immediate attention required!, 97.8, 2025-06-25 17:31:23, triggere  
+  d, 2025-06-25 17:31:23, 2025-06-25 17:31:23))                                    
+                                                                                   
+
+In MySqlConnection.php line 53:
+                                                                                  
+  SQLSTATE[01000]: Warning: 1265 Data truncated for column 'alert_type' at row 1  
+                                                                                  
+

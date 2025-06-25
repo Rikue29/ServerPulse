@@ -1,5 +1,5 @@
 <!-- Toast Container -->
-<div x-data="toastManager()" x-show="toasts.length > 0" class="fixed top-4 right-4 z-50 space-y-2" x-init="window.toastManager = $data">
+<div x-data="toastManager()" x-show="toasts.length > 0" class="fixed bottom-4 right-4 z-[99999] space-y-2 shadow-2xl" x-init="window.toastManager = $data">
     <template x-for="toast in toasts" :key="toast.id">
         <div x-show="toast.show"
              x-transition:enter="transform ease-out duration-300 transition"
@@ -127,4 +127,27 @@ window.showToast = function(type, title, message) {
         window.toastManager[type](title, message);
     }
 };
+
+// Ensure Livewire and Alpine are available before setting up listeners
+if (window.Livewire && window.Alpine) {
+    Livewire.on('show-toast', (event) => {
+        let data = event;
+        if (Array.isArray(event)) data = event[0];
+        if (window.toastManager && data && data.type) {
+            window.toastManager[data.type](data.title, data.message);
+        }
+    });
+}
+
+// Fallback for older Livewire versions
+document.addEventListener('DOMContentLoaded', function() {
+    if (window.Livewire) {
+        console.log('Setting up Livewire listeners on DOMContentLoaded');
+        window.Livewire.on('show-toast', (event) => {
+            console.log('Toast event received (fallback):', event);
+            const { type, title, message } = event;
+            window.showToast(type, title, message);
+        });
+    }
+});
 </script>

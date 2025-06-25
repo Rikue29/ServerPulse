@@ -76,47 +76,74 @@ class AlertsTable extends Component
 
     public function resolveAlert($id)
     {
+        \Log::info("Resolve alert called for ID: {$id}");
         try {
             $alert = Alert::findOrFail($id);
-            
+            \Log::info("Alert found: " . $alert->id . ", Status: " . $alert->status);
             if ($alert->status === 'resolved') {
                 $this->dispatch('show-toast', [
-                    'type' => 'warning', 
-                    'title' => 'Warning', 
-                    'message' => 'Alert is already resolved.'
+                    'type' => 'warning',
+                    'title' => 'Already Resolved',
+                    'message' => 'This alert has already been resolved.'
                 ]);
                 return;
             }
-
             $alert->update([
                 'status' => 'resolved',
                 'resolved_at' => now(),
                 'resolved_by' => Auth::id(),
             ]);
-
-            // Clear ALL cached properties to force refresh
-            unset($this->alerts);
-            unset($this->recentAlerts);  
-            unset($this->alertStats);
-            
-            // Force refresh
+            // Do NOT filter $this->alerts. Just reset page and refresh.
+            $this->resetPage();
             $this->dispatch('$refresh');
-
             $this->dispatch('show-toast', [
-                'type' => 'success', 
-                'title' => 'Success', 
-                'message' => 'Alert resolved successfully.'
+                'type' => 'success',
+                'title' => 'Alert Resolved',
+                'message' => 'Alert resolved and removed from the table.'
             ]);
-            
-            // Dispatch events for other components
-            $this->dispatch('alert-resolved', ['alertId' => $id]);
-            
+            $this->dispatch('alert-resolved', [ 'alertId' => $alert->id ]);
         } catch (\Exception $e) {
             $this->dispatch('show-toast', [
-                'type' => 'error', 
-                'title' => 'Error', 
+                'type' => 'error',
+                'title' => 'Resolution Failed',
                 'message' => 'Failed to resolve alert: ' . $e->getMessage()
             ]);
+        }
+    }
+
+    private function getCurrentMetricValue($server, $alertType)
+    {
+        // Simulate getting current server metrics for testing
+        // In a real application, this would fetch from your monitoring system
+        
+        try {
+            switch ($alertType) {
+                case 'performance':
+                case 'cpu':
+                    // Heavily favor low values for easier testing (30-70% range)
+                    return rand(30, 70);
+                    
+                case 'memory':
+                case 'mem':
+                    // Favor low values (25-65% range)
+                    return rand(25, 65);
+                    
+                case 'system':
+                case 'disk':
+                    // Favor low values (20-60% range) 
+                    return rand(20, 60);
+                    
+                case 'network':
+                case 'net':
+                    // Favor low values (15-55% range)
+                    return rand(15, 55);
+                    
+                default:
+                    // Default range heavily favors resolution (25-65%)
+                    return rand(25, 65);
+            }
+        } catch (\Exception $e) {
+            return null;
         }
     }
 
@@ -173,12 +200,12 @@ class AlertsTable extends Component
     {
         $query = Alert::with(['server', 'threshold', 'resolvedBy']);
 
-        // Filter by status - if showResolved is false, show both resolved and unresolved
-        // if showResolved is true, show only resolved
+        // Filter by status
         if ($this->showResolved) {
             $query->resolved();
+        } else {
+            $query->unresolved();
         }
-        // If showResolved is false, we show all alerts (both resolved and unresolved)
 
         // Search functionality
         if ($this->search) {
@@ -253,6 +280,16 @@ class AlertsTable extends Component
         
         // Re-render the component
         $this->render();
+    }
+
+    public function testLivewire()
+    {
+        \Log::info('Test Livewire method called successfully!');
+        $this->dispatch('show-toast', [
+            'type' => 'success',
+            'title' => 'Livewire Test',
+            'message' => 'Livewire is working correctly!'
+        ]);
     }
 
     public function render(): View
