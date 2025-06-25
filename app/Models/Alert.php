@@ -72,27 +72,50 @@ class Alert extends Model
         $value = $this->metric_value;
         $type = strtolower($this->alert_type);
         
-        // Apply specific thresholds based on metric type
+        // Apply realistic thresholds based on metric type
         switch ($type) {
-            case 'performance':
             case 'cpu':
+            case 'performance':
+                if ($value >= 95) return 'critical';
+                if ($value >= 85) return 'high';
+                if ($value >= 70) return 'medium';
+                return 'low';
+                
+            case 'memory':
+            case 'ram':
+                if ($value >= 90) return 'critical';
+                if ($value >= 80) return 'high';
+                if ($value >= 65) return 'medium';
+                return 'low';
+                
+            case 'disk':
+            case 'storage':
+                if ($value >= 95) return 'critical';
+                if ($value >= 85) return 'high';
+                if ($value >= 70) return 'medium';
+                return 'low';
+                
+            case 'network':
                 if ($value >= 90) return 'critical';
                 if ($value >= 75) return 'high';
                 if ($value >= 60) return 'medium';
                 return 'low';
                 
-            case 'memory':
-                if ($value >= 80) return 'high';
+            case 'temperature':
+                if ($value >= 85) return 'critical';
+                if ($value >= 75) return 'high';
                 if ($value >= 65) return 'medium';
                 return 'low';
                 
-            case 'system':
-            case 'disk':
-                if ($value >= 75) return 'medium';
-                if ($value >= 60) return 'low';
-                return 'normal';
+            case 'response_time':
+                // Response time in milliseconds
+                if ($value >= 5000) return 'critical';
+                if ($value >= 2000) return 'high';
+                if ($value >= 1000) return 'medium';
+                return 'low';
                 
             default:
+                // Generic thresholds for unknown types
                 if ($value >= 90) return 'critical';
                 if ($value >= 75) return 'high';
                 if ($value >= 60) return 'medium';
@@ -103,11 +126,10 @@ class Alert extends Model
     public function getSeverityColorAttribute(): string
     {
         return match($this->severity) {
-            'critical' => 'bg-red-500 text-white',
+            'critical' => 'bg-red-600 text-white',
             'high' => 'bg-orange-500 text-white',
             'medium' => 'bg-yellow-500 text-black',
             'low' => 'bg-blue-500 text-white',
-            'normal' => 'bg-green-500 text-white',
             default => 'bg-gray-500 text-white'
         };
     }
