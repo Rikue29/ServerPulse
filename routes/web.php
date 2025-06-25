@@ -124,7 +124,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // User Route
     Route::get('/user', [UserController::class, 'index'])->name('user');
 
-<<<<<<< Updated upstream
     // Server selection routes
     Route::get('/toggle-server/{id}', [ServerController::class, 'toggleServerSelection'])->name('toggle.server');
     Route::get('/select-all-servers', [ServerController::class, 'selectAllServers'])->name('select.all.servers');
@@ -132,11 +131,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     // Chart data route
     Route::get('/chart-data', [ServerController::class, 'getChartData'])->name('chart.data');
-=======
+
     // Test route for alert resolution
     Route::get('/test-resolve', function () {
         return view('test-resolve');
-    })->middleware(['auth', 'verified']);
+    });
 });
 
 // Test route without authentication for alert testing
@@ -173,12 +172,6 @@ Route::post('/test-resolve/{id}', function ($id) {
             'message' => 'Failed to resolve alert: ' . $e->getMessage()
         ], 500);
     }
-});
-
-// Quick login page for testing
-Route::get('/quick-login', function () {
-    return view('quick-login');
->>>>>>> Stashed changes
 });
 
 require __DIR__.'/auth.php';
