@@ -135,6 +135,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     // Chart data route
     Route::get('/chart-data', [ServerController::class, 'getChartData'])->name('chart.data');
+    // Test route for alert resolution
+    Route::get('/test-resolve', function () {
+        return view('test-resolve');
+    });
 });
 
 // Test routes without authentication for debugging
@@ -185,5 +189,4 @@ Route::post('/quick-login', function () {
     }
     return redirect('/login');
 });
-
 require __DIR__.'/auth.php';

@@ -422,23 +422,12 @@ function updateServersPage(eventData) {
             if (uptimeInfoDiv) {
                 if (eventData.status === 'online') {
                     // Server is online - show uptime
-                    let uptimeDisplay = 'N/A';
-                    let source = 'unknown';
-                    
-                    // First try current_uptime (most accurate dynamic value)
-                    if (eventData.current_uptime !== null && eventData.current_uptime !== undefined) {
-                        const uptimeSeconds = parseFloat(eventData.current_uptime);
-                        uptimeDisplay = formatUptime(uptimeSeconds);
-                        source = 'current_uptime';
-                    } 
-                    // Fallback to system_uptime if available
-                    else if (eventData.system_uptime) {
-                        uptimeDisplay = eventData.system_uptime;
-                        source = 'system_uptime';
-                    }
+                    // FIXED: Always use system_uptime directly from the server for consistency
+                    // This matches what's shown on initial page load
+                    let uptimeDisplay = eventData.system_uptime || 'N/A';
                     
                     uptimeInfoDiv.textContent = 'Uptime: ' + uptimeDisplay;
-                    console.log(`✅ Updated Status Uptime to: ${uptimeDisplay} (source: ${source})`);
+                    console.log(`✅ Updated Status Uptime to: ${uptimeDisplay} (source: system_uptime)`);
                     
                     // Highlight the update to make it more noticeable
                     uptimeInfoDiv.style.transition = 'all 0.5s';
@@ -489,184 +478,13 @@ function updateServersPage(eventData) {
                 const serverId = eventData.server_id;
                 
                 if (eventData.status === 'online') {
-                    // Server is online - show uptime with improved logic for source selection
-                    let uptimeDisplay = 'N/A';
-                    let source = 'none';
-                    
-                    // Debug current values
-                    console.group(`🕒 [Server ${serverId}] Uptime Source Selection`);
-                    console.log('current_uptime:', eventData.current_uptime, typeof eventData.current_uptime);
-                    console.log('system_uptime:', eventData.system_uptime, typeof eventData.system_uptime);
-                    if (eventData.raw_stats) console.log('raw_stats.uptime:', eventData.raw_stats.uptime);
-                    
-                    // Create an array of all possible uptime sources to try
-                    const uptimeSources = [];
-                    
-                    // For system_uptime, add it first if it's valid and non-zero
-                    if (eventData.system_uptime && eventData.system_uptime !== '0s') {
-                        // If system_uptime is already formatted and looks valid, use it directly
-                        if (typeof eventData.system_uptime === 'string') {
-                            // Check if it has 'h' or 'd' to ensure it's a meaningful value
-                            const hasHoursOrDays = eventData.system_uptime.includes('d') || 
-                                                eventData.system_uptime.includes('h');
-                            
-                            // Or if it has a meaningful uptime in minutes
-                            const minutesMatch = eventData.system_uptime.match(/(\d+)m/);
-                            const hasSignificantMinutes = minutesMatch && parseInt(minutesMatch[1]) > 5;
-                            
-                            if (hasHoursOrDays || hasSignificantMinutes) {
-                                console.log('✅ system_uptime string is valid and has significant time');
-                                uptimeSources.push({
-                                    type: 'system_uptime_string',
-                                    value: eventData.system_uptime,
-                                    format: (val) => val,
-                                    priority: 10 // High priority
-                                });
-                            }
-                        }
-                        // Otherwise try to parse it as a number
-                        else if (typeof eventData.system_uptime === 'number' && eventData.system_uptime > 60) {
-                            console.log('✅ system_uptime number is valid and > 60s');
-                            uptimeSources.push({
-                                type: 'system_uptime_number',
-                                value: parseFloat(eventData.system_uptime),
-                                format: (val) => formatUptime(val),
-                                priority: 10 // High priority
-                            });
-                        }
-                    }
-                    
-                    // If we have current_uptime and it's meaningful (> 60s), add it as another option
-                    // For Kali Linux and some servers, current_uptime is 0-1s despite being up for hours
-                    if (eventData.current_uptime !== null && 
-                        eventData.current_uptime !== undefined && 
-                        eventData.current_uptime !== '') {
-                        
-                        const uptimeVal = parseFloat(eventData.current_uptime);
-                        
-                        // Only use current_uptime if it's a meaningful value (>60 seconds)
-                        if (!isNaN(uptimeVal) && uptimeVal > 60) {
-                            console.log('✅ current_uptime is valid and > 60s:', uptimeVal);
-                            uptimeSources.push({
-                                type: 'current_uptime',
-                                value: uptimeVal,
-                                format: (val) => formatUptime(val),
-                                priority: 20 // Highest priority for significant values
-                            });
-                        } else {
-                            console.log('⚠️ current_uptime is too small or invalid:', uptimeVal);
-                        }
-                    }
-                    
-                    // If we have uptime in raw_stats, add it as another option
-                    if (eventData.raw_stats && eventData.raw_stats.uptime) {
-                        const rawUptime = parseFloat(eventData.raw_stats.uptime);
-                        if (!isNaN(rawUptime) && rawUptime > 60) {
-                            console.log('✅ raw_stats.uptime is valid:', rawUptime);
-                            uptimeSources.push({
-                                type: 'raw_stats.uptime',
-                                value: rawUptime,
-                                format: (val) => formatUptime(val),
-                                priority: 5 // Lower priority
-                            });
-                        }
-                    }
-                    
-                    // Check for manually tracked uptime as a fallback
-                    if (window.manualUptimeTracking && window.manualUptimeTracking[serverId] && 
-                        window.manualUptimeTracking[serverId].baseSeconds > 60) {
-                        console.log('✅ Manual tracking is available');
-                        const now = Date.now();
-                        const tracking = window.manualUptimeTracking[serverId];
-                        const elapsedSeconds = Math.floor((now - tracking.lastUpdate) / 1000);
-                        const totalSeconds = tracking.baseSeconds + elapsedSeconds;
-                        
-                        uptimeSources.push({
-                            type: 'manual_tracking',
-                            value: totalSeconds,
-                            format: (val) => formatUptime(val),
-                            priority: 1 // Lowest priority - use as last resort
-                        });
-                    }
-                    
-                    console.log('Available uptime sources:', uptimeSources.length);
-                    
-                    // Sort sources by priority (highest first)
-                    uptimeSources.sort((a, b) => (b.priority || 0) - (a.priority || 0));
-                    
-                    // Try sources in priority order
-                    for (const src of uptimeSources) {
-                        if ((src.value !== null && src.value !== undefined && 
-                             !isNaN(src.value) && src.value > 0) || 
-                            (typeof src.value === 'string' && src.value.trim() !== '' && src.value !== '0s')) {
-                            
-                            uptimeDisplay = src.format(src.value);
-                            source = src.type;
-                            console.log(`✅ Selected uptime source: ${source} with value:`, src.value);
-                            
-                            // For numeric values, store for debugging
-                            if (typeof src.value === 'number') {
-                                // Initialize debugging structures
-                                if (!window.uptimeLogs) window.uptimeLogs = {};
-                                if (!window.uptimeLogs[serverId]) window.uptimeLogs[serverId] = [];
-                                
-                                window.uptimeLogs[serverId].push({
-                                    timestamp: new Date(),
-                                    source: src.type,
-                                    value: src.value,
-                                    formatted: uptimeDisplay
-                                });
-                                
-                                // Keep log size manageable
-                                if (window.uptimeLogs[serverId].length > 10) {
-                                    window.uptimeLogs[serverId].shift();
-                                }
-                            }
-                            
-                            // We found a valid source, no need to check others
-                            break;
-                        }
-                    }
-                    
-                    console.groupEnd();
-                    
-                    // Debug log
-                    console.log(`🕒 [Server ${serverId}] Uptime display: ${uptimeDisplay} (source: ${source})`);
-                    
-                    // SPECIAL HANDLING: For servers that aren't updating their uptime in real time
-                    // Store in a mapping so we can manually increment the uptime for these servers
-                    if (!window.manualUptimeTracking) {
-                        window.manualUptimeTracking = {};
-                    }
-                    
-                    // Only track servers with valid uptime values
-                    if (uptimeDisplay !== 'N/A') {
-                        const now = Date.now();
-                        
-                        if (!window.manualUptimeTracking[serverId]) {
-                            // First time seeing this server, initialize tracking
-                            window.manualUptimeTracking[serverId] = {
-                                lastUpdate: now,
-                                display: uptimeDisplay,
-                                source: source,
-                                // Try to parse the uptime into seconds for incrementing
-                                baseSeconds: parseUptimeToSeconds(uptimeDisplay)
-                            };
-                        } else {
-                            // Server seen before, update tracking
-                            window.manualUptimeTracking[serverId].lastUpdate = now;
-                            window.manualUptimeTracking[serverId].display = uptimeDisplay;
-                            window.manualUptimeTracking[serverId].source = source;
-                            window.manualUptimeTracking[serverId].baseSeconds = parseUptimeToSeconds(uptimeDisplay);
-                        }
-                        
-                        console.log(`🕒 [Server ${serverId}] Manual tracking updated:`, 
-                                   window.manualUptimeTracking[serverId]);
-                    }
+                    // FIXED: Always use system_uptime directly from the server for consistency
+                    // This matches what's shown on initial page load
+                    let uptimeDisplay = eventData.system_uptime || 'N/A';
                     
                     // Update the display
                     uptimeText.textContent = uptimeDisplay;
-                    console.log(`✅ [Server ${serverId}] Updated Uptime to: ${uptimeDisplay} (source: ${source})`);
+                    console.log(`✅ [Server ${serverId}] Updated Uptime to: ${uptimeDisplay} (source: system_uptime)`);
                     
                     // Visual feedback for the update
                     uptimeText.style.transition = 'all 0.5s';

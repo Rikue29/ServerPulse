@@ -94,6 +94,50 @@ class Server extends Model
     ];
 
     /**
+     * Accessor for the formatted system uptime.
+     * Parses the `system_uptime` string and returns it in a consistent, readable format.
+     *
+     * @return string
+     */
+    public function getFormattedSystemUptimeAttribute(): string
+    {
+        if (empty($this->system_uptime)) {
+            return 'N/A';
+        }
+
+        // The format is expected to be like "Xh Ym Zs"
+        preg_match('/(\d+)h\s*(\d+)m\s*(\d+)s/', $this->system_uptime, $matches);
+
+        if (count($matches) === 4) {
+            $hours = (int) $matches[1];
+            $minutes = (int) $matches[2];
+
+            $days = floor($hours / 24);
+            $remainingHours = $hours % 24;
+
+            $formatted = '';
+            if ($days > 0) {
+                $formatted .= $days . 'd ';
+            }
+            if ($remainingHours > 0) {
+                $formatted .= $remainingHours . 'h ';
+            }
+            if ($minutes > 0) {
+                $formatted .= $minutes . 'm';
+            }
+            
+            // If uptime is less than a minute, show seconds.
+            if(empty(trim($formatted))) {
+                return ((int) $matches[3]) . 's';
+            }
+
+            return trim($formatted);
+        }
+
+        return $this->system_uptime; // Fallback to original string if parsing fails
+    }
+
+    /**
      * Accessor for the current downtime, formatted as a human-readable string.
      *
      * @return string|null
