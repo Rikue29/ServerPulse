@@ -13,12 +13,7 @@
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
         <!-- Scripts -->
-        @if(app()->environment('local'))
-            @vite(['resources/css/app.css', 'resources/js/app.js'])
-        @else
-            <link rel="stylesheet" href="{{ asset('build/assets/app-BedLfyV1.css') }}">
-            <script type="module" src="{{ asset('build/assets/app-CumOnirq.js') }}"></script>
-        @endif
+        @vite(['resources/css/app.css', 'resources/js/app.js'])
 
         <!-- Chart.js -->
         <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
@@ -32,7 +27,7 @@
                 document.write('<script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"><\/script>');
             }
         </script>-->
-        <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+        <!--<script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>-->
         @livewireStyles
     </head>
     <body class="font-sans antialiased h-full">

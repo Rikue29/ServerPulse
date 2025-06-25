@@ -3,29 +3,18 @@ import Chart from 'chart.js/auto';
 
 window.Chart = Chart;
 
-// EMERGENCY FIX FOR NETWORK THROUGHPUT
-// Global object to ensure network throughput is available everywhere
-window.NETWORK_THROUGHPUT = {
-    value: 0,
-    timestamp: Date.now(),
-    setValue: function(newValue) {
-        this.value = newValue;
-        this.timestamp = Date.now();
-        console.log('🚨 GLOBAL NETWORK THROUGHPUT SET:', newValue.toFixed(2), 'KB/s');
-        return newValue;
-    },
-    getValue: function() {
-        return this.value;
-    }
-};
-
-console.log('ServerPulse app.js loaded!');
-
+// Import Alpine.js for Livewire compatibility
 import Alpine from 'alpinejs';
-
 window.Alpine = Alpine;
 
-Alpine.start();
+// Start Alpine after DOM is loaded
+document.addEventListener('DOMContentLoaded', function () {
+    if (!window.Alpine.version) {
+        window.Alpine.start();
+    }
+});
+
+console.log('ServerPulse app.js loaded with Alpine!', Alpine.version);
 
 // Route Navigation Helper
 document.addEventListener('DOMContentLoaded', function() {

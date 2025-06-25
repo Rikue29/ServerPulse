@@ -1,4 +1,4 @@
-<div class="min-h-screen bg-gray-50" wire:poll.10s>
+<div class="min-h-screen bg-gray-50" wire:poll.5s>
     <!-- Header Section -->
     <div class="bg-white shadow-sm">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
@@ -6,11 +6,6 @@
                 <div>
                     <h1 class="text-3xl font-bold text-gray-900">System Alerts</h1>
                     <p class="mt-2 text-gray-600">Monitor and manage system performance alerts</p>
-                    
-                    <!-- Debug Test Button -->
-                    <button wire:click="testLivewire" class="mt-2 px-3 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600">
-                        Test Livewire
-                    </button>
                 </div>
                 <div class="flex items-center space-x-6 w-full">
                     <!-- Modern Stats Cards -->
@@ -277,10 +272,9 @@
                                         wire:click="resolveAlert({{ $alert->id }})"
                                         wire:loading.attr="disabled"
                                         wire:target="resolveAlert"
-                                        onclick="console.log('Button clicked for alert {{ $alert->id }}'); setTimeout(() => { console.log('Livewire component:', window.Livewire); }, 100);"
                                         class="inline-flex items-center px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white text-sm font-medium rounded-lg transition-all duration-200 transform hover:scale-105 disabled:hover:scale-100 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 shadow-sm"
-                                        title="Resolve this alert if the metric value has returned to normal"
-                                        id="resolve-btn-{{ $alert->id }}"
+                                        title="Resolve this alert"
+                                        type="button"
                                     >
                                         <span wire:loading.remove wire:target="resolveAlert" class="flex items-center">
                                             <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -338,14 +332,6 @@
         </svg>
         <span id="new-alert-message">New alert triggered!</span>
         <button onclick="document.getElementById('new-alert-banner').style.display='none'" class="ml-4 bg-white text-red-600 px-2 py-1 rounded">Dismiss</button>
-    </div>
-
-    <!-- Loading Indicator -->
-    <div wire:loading class="fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center z-50">
-        <div class="bg-white rounded-lg p-6 flex items-center space-x-3">
-            <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
-            <span class="text-gray-700">Loading alerts...</span>
-        </div>
     </div>
 </div>
 

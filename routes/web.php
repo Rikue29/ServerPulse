@@ -46,6 +46,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Help and Support Route
     Route::get('/help', [HelpController::class, 'index'])->name('help.index');
 
+    // UI Test Route
+    Route::get('/ui-test', function () {
+        return view('ui-test');
+    })->name('ui.test');
+
     // Test Routes
     Route::get('/test-alerts', function () {
         return view('test-alerts');

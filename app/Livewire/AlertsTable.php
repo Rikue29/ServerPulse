@@ -76,10 +76,8 @@ class AlertsTable extends Component
 
     public function resolveAlert($id)
     {
-        \Log::info("Resolve alert called for ID: {$id}");
         try {
             $alert = Alert::findOrFail($id);
-            \Log::info("Alert found: " . $alert->id . ", Status: " . $alert->status);
             
             if ($alert->status === 'resolved') {
                 $this->dispatch('show-toast', [
@@ -89,32 +87,39 @@ class AlertsTable extends Component
                 ]);
                 return;
             }
-            
+
+            // Update the alert status
             $alert->update([
                 'status' => 'resolved',
                 'resolved_at' => now(),
                 'resolved_by' => Auth::id(),
             ]);
-            
-            \Log::info("Alert {$id} resolved successfully");
-            
-            // Force component to re-render with fresh data
-            $this->resetPage();
-            
+
+            // Force immediate refresh by clearing cached properties
+            unset($this->alerts);
+            unset($this->recentAlerts);
+            unset($this->alertStats);
+
+            // Reset pagination if this was the last item on the page
+            if ($this->getAlertsProperty()->count() === 0 && $this->getPage() > 1) {
+                $this->setPage(1);
+            }
+
             $this->dispatch('show-toast', [
                 'type' => 'success',
                 'title' => 'Alert Resolved',
-                'message' => 'Alert resolved and removed from the table.'
+                'message' => 'Alert resolved successfully!'
             ]);
-            
-            $this->dispatch('alert-resolved', [ 'alertId' => $alert->id ]);
-            
+
+            $this->dispatch('alert-resolved', ['alertId' => $id]);
+
         } catch (\Exception $e) {
-            \Log::error("Failed to resolve alert {$id}: " . $e->getMessage());
+            \Log::error("Error resolving alert {$id}: " . $e->getMessage());
+            
             $this->dispatch('show-toast', [
                 'type' => 'error',
                 'title' => 'Resolution Failed',
-                'message' => 'Failed to resolve alert: ' . $e->getMessage()
+                'message' => 'Failed to resolve alert. Please try again.'
             ]);
         }
     }
@@ -290,20 +295,10 @@ class AlertsTable extends Component
         $this->render();
     }
 
-    public function testLivewire()
-    {
-        \Log::info('Test Livewire method called successfully!');
-        $this->dispatch('show-toast', [
-            'type' => 'success',
-            'title' => 'Livewire Test',
-            'message' => 'Livewire is working correctly!'
-        ]);
-    }
-
     public function render(): View
     {
         return view('livewire.alerts-table', [
-            'alerts' => $this->getAlertsProperty(),
+            'alerts' => $this->alerts,
             'recentAlerts' => $this->recentAlerts,
             'stats' => $this->alertStats,
         ]);
