@@ -7,6 +7,7 @@ use App\Http\Controllers\AnalyticsController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\UserController;
+use App\Http\Controllers\HelpController;
 use App\Http\Livewire\LogDetails;
 use App\Livewire\AlertsTable;
 use Illuminate\Support\Facades\Route;
@@ -41,6 +42,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/alerts/{id}/resolve', [App\Http\Controllers\AlertController::class, 'resolve'])->name('alerts.resolve');
     Route::get('/alerts/recent', [App\Http\Controllers\AlertController::class, 'recent'])->name('alerts.recent');
     Route::get('/alerts', [App\Http\Controllers\AlertController::class, 'index'])->name('alerts.index');
+
+    // Help and Support Route
+    Route::get('/help', [HelpController::class, 'index'])->name('help.index');
 
     // Test Routes
     Route::get('/test-alerts', function () {

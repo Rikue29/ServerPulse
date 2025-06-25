@@ -80,6 +80,7 @@ class AlertsTable extends Component
         try {
             $alert = Alert::findOrFail($id);
             \Log::info("Alert found: " . $alert->id . ", Status: " . $alert->status);
+            
             if ($alert->status === 'resolved') {
                 $this->dispatch('show-toast', [
                     'type' => 'warning',
@@ -88,21 +89,28 @@ class AlertsTable extends Component
                 ]);
                 return;
             }
+            
             $alert->update([
                 'status' => 'resolved',
                 'resolved_at' => now(),
                 'resolved_by' => Auth::id(),
             ]);
-            // Do NOT filter $this->alerts. Just reset page and refresh.
+            
+            \Log::info("Alert {$id} resolved successfully");
+            
+            // Force component to re-render with fresh data
             $this->resetPage();
-            $this->dispatch('$refresh');
+            
             $this->dispatch('show-toast', [
                 'type' => 'success',
                 'title' => 'Alert Resolved',
                 'message' => 'Alert resolved and removed from the table.'
             ]);
+            
             $this->dispatch('alert-resolved', [ 'alertId' => $alert->id ]);
+            
         } catch (\Exception $e) {
+            \Log::error("Failed to resolve alert {$id}: " . $e->getMessage());
             $this->dispatch('show-toast', [
                 'type' => 'error',
                 'title' => 'Resolution Failed',
@@ -295,7 +303,7 @@ class AlertsTable extends Component
     public function render(): View
     {
         return view('livewire.alerts-table', [
-            'alerts' => $this->alerts,
+            'alerts' => $this->getAlertsProperty(),
             'recentAlerts' => $this->recentAlerts,
             'stats' => $this->alertStats,
         ]);
