@@ -5,7 +5,12 @@
     <div class="bg-white border-b border-gray-200 px-6 py-4">
         <div class="flex items-center justify-between">
             <div>
-                <h1 class="text-2xl font-semibold text-gray-900">Analytics</h1>
+                <h1 class="text-2xl font-semibold text-gray-900">
+                    Analytics 
+                    @if(isset($selected_server_id) && $servers->where('id', $selected_server_id)->first())
+                        <span id="selected-server-name" class="text-blue-600 ml-1">| {{ $servers->where('id', $selected_server_id)->first()->name }}</span>
+                    @endif
+                </h1>
                 <p class="text-sm text-gray-500 mt-1">Monitor and analyze your server performance metrics</p>
             </div>
             <div class="flex items-center space-x-2">
@@ -200,6 +205,28 @@
             const ctx = document.getElementById('performanceChart').getContext('2d');
             const chartData = @json($chart_data);
             const serverId = document.getElementById('server_id') ? document.getElementById('server_id').value : null;
+            const serverSelect = document.getElementById('server_id');
+            
+            // Function to update server name in header when changed
+            if (serverSelect) {
+                serverSelect.addEventListener('change', function() {
+                    // The form will auto-submit, but we can update the UI immediately for better UX
+                    const selectedServerName = this.options[this.selectedIndex].text;
+                    let headerServerName = document.getElementById('selected-server-name');
+                    const analyticsHeader = document.querySelector('.text-2xl.font-semibold');
+                    
+                    if (headerServerName) {
+                        headerServerName.textContent = '| ' + selectedServerName;
+                    } else if (analyticsHeader) {
+                        // Create the span if it doesn't exist
+                        headerServerName = document.createElement('span');
+                        headerServerName.id = 'selected-server-name';
+                        headerServerName.className = 'text-blue-600 ml-1';
+                        headerServerName.textContent = '| ' + selectedServerName;
+                        analyticsHeader.appendChild(headerServerName);
+                    }
+                });
+            }
 
             // Utility for localStorage graph state (per-server)
             function getActiveGraphKey(serverId) {

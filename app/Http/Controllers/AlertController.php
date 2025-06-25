@@ -203,8 +203,8 @@ class AlertController extends Controller
             ]);
                 
             // Direct API call - bypassing Laravel mailer completely
-            $apiKey = '88986abb0e180651f5ae5da5782eb0fe-a1dad75f-46d63fad';
-            $domain = 'sandbox1903e7c34fd549419d635a5a38e4bf39.mailgun.org';
+            $apiKey = env('MAILGUN_SECRET', '');
+            $domain = env('MAILGUN_DOMAIN', '');
             $serverName = $alert->server->name ?? "Server #{$alert->server_id}";
             
             foreach ($emails as $email) {

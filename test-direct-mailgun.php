@@ -1,11 +1,31 @@
 <?php
 
-// Test script to send email directly via Mailgun API
-$apiKey = '88986abb0e180651f5ae5da5782eb0fe-a1dad75f-46d63fad';
-$domain = 'sandbox1903e7c34fd549419d635a5a38e4bf39.mailgun.org';
-$email = '215746@student.upm.edu.my';
+// Load environment variables if not already loaded
+$envFile = __DIR__ . '/.env';
+if (file_exists($envFile)) {
+    $lines = file($envFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+    foreach ($lines as $line) {
+        if (strpos($line, '=') !== false && strpos($line, '#') !== 0) {
+            list($key, $value) = explode('=', $line, 2);
+            $key = trim($key);
+            $value = trim($value);
+            putenv("$key=$value");
+        }
+    }
+}
 
-echo "Starting email test...\n";
+// Test script to send email directly via Mailgun API
+$apiKey = getenv('MAILGUN_SECRET');
+$domain = getenv('MAILGUN_DOMAIN');
+$email = '215746@student.upm.edu.my'; // You might want to make this configurable too
+
+if (empty($apiKey) || empty($domain)) {
+    echo "Error: Mailgun credentials not found in environment.\n";
+    echo "Please set MAILGUN_SECRET and MAILGUN_DOMAIN in your .env file.\n";
+    exit(1);
+}
+
+echo "Starting email test with domain: $domain\n";
 
 // Initialize curl
 $ch = curl_init("https://api.mailgun.net/v3/{$domain}/messages");
