@@ -80,8 +80,8 @@
                 <span :class="{ 'lg:hidden': sidebarMinimized }" class="ml-3 transition-opacity duration-300">Settings</span>
             </a>
 
-            <a href="#" 
-               class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg text-gray-900 hover:bg-gray-100 transition-colors duration-200"
+            <a href="{{ route('help.index') }}" 
+               class="flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-colors duration-200 {{ request()->routeIs('help.index') ? 'bg-blue-50 text-blue-700' : 'text-gray-900 hover:bg-gray-100' }}"
                :class="{ 'justify-center': sidebarMinimized }">
                 <i class="fas fa-question-circle text-lg w-5"></i>
                 <span :class="{ 'lg:hidden': sidebarMinimized }" class="ml-3 transition-opacity duration-300">Help & Support</span>
