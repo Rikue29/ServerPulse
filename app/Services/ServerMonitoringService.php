@@ -568,32 +568,36 @@ Write-Output "$cpu|$memory|$disk|$uptime|$network|$diskIO"
                 $level = $this->determineLevelBySeverity($threshold->metric_type, $currentValue, $threshold->threshold_value);
                 $currentTime = \Carbon\Carbon::now('Asia/Kuala_Lumpur')->utc();
 
-                // Create alert if not already triggered for this threshold
-                $existingAlert = \App\Models\Alert::where('threshold_id', $threshold->id)
-                    ->where('status', 'triggered')
-                    ->first();
-                if (!$existingAlert) {
-                    $alert = \App\Models\Alert::create([
+                // Use AlertController to create/update the alert (which will send email)
+                try {
+                    $alertController = new \App\Http\Controllers\AlertController();
+                    $request = new \Illuminate\Http\Request([
                         'threshold_id' => $threshold->id,
                         'server_id' => $server->id,
                         'metric_value' => $currentValue,
-                        'status' => 'triggered',
-                        'alert_type' => strtolower($threshold->metric_type),
-                        'alert_message' => sprintf(
-                            '%s %s exceeded threshold: %.2f%s (threshold: %.2f%s)',
-                            ucfirst($threshold->metric_type),
-                            $threshold->metric_type === 'Load' ? 'average' : 'usage',
-                            $currentValue,
-                            $threshold->metric_type === 'Load' ? '' : '%',
-                            $threshold->threshold_value,
-                            $threshold->metric_type === 'Load' ? '' : '%'
-                        ),
-                        'alert_time' => $currentTime,
                     ]);
-                    // Dispatch browser event for new alert (for banner)
-                    if (function_exists('broadcast')) {
-                        broadcast(new \App\Events\NewAlertCreated($alert));
+                    
+                    $response = $alertController->trigger($request);
+                    $responseData = json_decode($response->getContent(), true);
+                    
+                    \Illuminate\Support\Facades\Log::info('Alert created via controller', [
+                        'response' => $responseData,
+                        'metric_type' => $threshold->metric_type,
+                        'value' => $currentValue
+                    ]);
+                    
+                    if (isset($responseData['alert'])) {
+                        $alert = \App\Models\Alert::find($responseData['alert']['id']);
+                        // Dispatch browser event for new alert (for banner)
+                        if (function_exists('broadcast') && $alert) {
+                            broadcast(new \App\Events\NewAlertCreated($alert));
+                        }
                     }
+                } catch (\Exception $e) {
+                    \Illuminate\Support\Facades\Log::error('Failed to create alert via controller', [
+                        'error' => $e->getMessage(),
+                        'trace' => $e->getTraceAsString()
+                    ]);
                 }
 
                 // Use correct timezone for log creation

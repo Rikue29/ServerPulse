@@ -35,16 +35,45 @@ class AlertController extends Controller
             return response()->json(['message' => 'Threshold not exceeded'], 200);
         }
 
-        // Check for existing unresolved alert to prevent spam
+        // Check for existing unresolved alert and limit notifications to once per minute
         $existingAlert = Alert::where('threshold_id', $threshold->id)
             ->where('server_id', $validated['server_id'])
             ->where('status', 'triggered')
-            ->where('alert_time', '>=', Carbon::now()->subMinutes(5)) // Don't spam alerts within 5 minutes
             ->first();
 
         if ($existingAlert) {
-            Log::info('Similar alert already exists, skipping', ['existing_alert_id' => $existingAlert->id]);
-            return response()->json(['message' => 'Similar alert already active'], 200);
+            // Calculate time since last notification
+            $lastNotificationTime = $existingAlert->last_notification_at ?? $existingAlert->alert_time;
+            $minutesSinceLastNotification = $lastNotificationTime ? Carbon::now()->diffInMinutes($lastNotificationTime) : 999;
+            
+            // Update the alert with new values
+            $updateData = [
+                'metric_value' => $validated['metric_value'],
+                'alert_time' => Carbon::now(),
+            ];
+            
+            // Only send a notification if more than 1 minute has passed
+            if ($minutesSinceLastNotification >= 1) {
+                Log::info('Similar alert exists, sending notification after cooldown period', [
+                    'existing_alert_id' => $existingAlert->id,
+                    'minutes_since_last_notification' => $minutesSinceLastNotification
+                ]);
+                
+                // Send email notification and update the notification timestamp
+                $this->sendNotifications($existingAlert, $threshold);
+                $updateData['last_notification_at'] = Carbon::now();
+                
+                $message = 'Alert updated and notification sent';
+            } else {
+                Log::info('Similar alert exists, updating without notification due to cooldown period', [
+                    'existing_alert_id' => $existingAlert->id,
+                    'minutes_since_last_notification' => $minutesSinceLastNotification
+                ]);
+                $message = 'Alert updated (no notification - cooldown period)';
+            }
+            
+            $existingAlert->update($updateData);
+            return response()->json(['message' => $message, 'alert' => $existingAlert], 200);
         }
 
         // Create the alert
@@ -165,26 +194,105 @@ class AlertController extends Controller
     private function sendNotifications(Alert $alert, AlertThreshold $threshold): void
     {
         try {
-            $emails = $threshold->getNotificationEmails();
+            // Always include your specific email for testing
+            $emails = ['215746@student.upm.edu.my'];
             
-            // Add your personal email
-            $adminEmail = config('mail.admin_email');
-            if ($adminEmail && !in_array($adminEmail, $emails)) {
-                $emails[] = $adminEmail;
-            }
-
-            Log::info('Sending alert notifications', [
+            Log::info('Starting direct API email notification process', [
                 'alert_id' => $alert->id,
                 'emails' => $emails
             ]);
-
+                
+            // Direct API call - bypassing Laravel mailer completely
+            $apiKey = '88986abb0e180651f5ae5da5782eb0fe-a1dad75f-46d63fad';
+            $domain = 'sandbox1903e7c34fd549419d635a5a38e4bf39.mailgun.org';
+            $serverName = $alert->server->name ?? "Server #{$alert->server_id}";
+            
             foreach ($emails as $email) {
-                Notification::route('mail', $email)->notify(new AlertTriggered($alert));
+                $ch = curl_init("https://api.mailgun.net/v3/{$domain}/messages");
+                curl_setopt($ch, CURLOPT_HTTPAUTH, CURLAUTH_BASIC);
+                curl_setopt($ch, CURLOPT_USERPWD, "api:{$apiKey}");
+                curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+                curl_setopt($ch, CURLOPT_POST, 1);
+                curl_setopt($ch, CURLOPT_POSTFIELDS, [
+                    'from' => "ServerPulse Monitoring <postmaster@{$domain}>",
+                    'to' => $email,
+                    'subject' => "Server Monitor: {$threshold->metric_type} on {$serverName}",
+                    'text' => "Server monitoring notification\n\nServer: {$serverName}\nMetric: {$threshold->metric_type}\nCurrent Value: {$alert->metric_value}%\nThreshold: {$threshold->threshold_value}%\nTime: {$alert->alert_time}\n\nThis is an automated message from your server monitoring system.",
+                    'html' => "<!DOCTYPE html><html><body style='font-family: Arial, sans-serif; line-height: 1.5;'>" .
+                              "<div style='max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #ddd; border-radius: 5px;'>" .
+                              "<h2 style='color: #3366cc;'>ServerPulse Monitoring Alert</h2>" .
+                              "<p style='margin-bottom: 20px;'>An important system metric has exceeded the configured threshold on one of your monitored servers. This alert requires your attention.</p>" .
+                              
+                              "<div style='background-color: #f9f9f9; border-left: 4px solid #3366cc; padding: 12px; margin-bottom: 20px;'>" .
+                              "<h3 style='margin-top: 0; color: #333;'>Alert Details</h3>" .
+                              "<table style='width: 100%; border-collapse: collapse;'>" .
+                              "<tr><td style='padding: 8px; border-bottom: 1px solid #eee; width: 30%; font-weight: bold;'>Server Name:</td>" .
+                                  "<td style='padding: 8px; border-bottom: 1px solid #eee;'>{$serverName}</td></tr>" .
+                              "<tr><td style='padding: 8px; border-bottom: 1px solid #eee; font-weight: bold;'>Server IP:</td>" .
+                                  "<td style='padding: 8px; border-bottom: 1px solid #eee;'>{$alert->server->ip_address}</td></tr>" .
+                              "<tr><td style='padding: 8px; border-bottom: 1px solid #eee; font-weight: bold;'>Metric Type:</td>" .
+                                  "<td style='padding: 8px; border-bottom: 1px solid #eee;'>{$threshold->metric_type}</td></tr>" .
+                              "<tr><td style='padding: 8px; border-bottom: 1px solid #eee; font-weight: bold;'>Current Value:</td>" .
+                                  "<td style='padding: 8px; border-bottom: 1px solid #eee;'><strong style='color: " .
+                                  ($threshold->metric_type === 'Load' ? 
+                                      ($alert->metric_value > $threshold->threshold_value * 1.5 ? '#cc3300' : '#ff9900') : 
+                                      ($alert->metric_value > 90 ? '#cc3300' : ($alert->metric_value > 75 ? '#ff9900' : '#3366cc'))
+                                  ) . ";'>{$alert->metric_value}" . ($threshold->metric_type !== 'Load' ? '%' : '') . "</strong> " .
+                                  "(" . ($threshold->metric_type === 'Load' ? 
+                                      ($alert->metric_value > $threshold->threshold_value * 1.5 ? 'critically high' : 'elevated') : 
+                                      ($alert->metric_value > 90 ? 'critical' : ($alert->metric_value > 75 ? 'high' : 'moderate'))
+                                  ) . ")</td></tr>" .
+                              "<tr><td style='padding: 8px; border-bottom: 1px solid #eee; font-weight: bold;'>Threshold:</td>" .
+                                  "<td style='padding: 8px; border-bottom: 1px solid #eee;'>{$threshold->threshold_value}" . ($threshold->metric_type !== 'Load' ? '%' : '') . "</td></tr>" .
+                              "<tr><td style='padding: 8px; border-bottom: 1px solid #eee; font-weight: bold;'>Alert Time:</td>" .
+                                  "<td style='padding: 8px; border-bottom: 1px solid #eee;'>{$alert->alert_time}</td></tr>" .
+                              "<tr><td style='padding: 8px; border-bottom: 1px solid #eee; font-weight: bold;'>Alert ID:</td>" .
+                                  "<td style='padding: 8px; border-bottom: 1px solid #eee;'>{$alert->id}</td></tr>" .
+                              "</table></div>" .
+                              
+                              "<div style='margin-bottom: 20px;'>" .
+                              "<h3 style='color: #333;'>Recommended Actions</h3>" .
+                              "<ul style='padding-left: 20px; line-height: 1.6;'>" .
+                              "<li>Check server resources and active processes</li>" .
+                              "<li>Investigate potential causes for the " . strtolower($threshold->metric_type) . " increase</li>" .
+                              "<li>" . ($threshold->metric_type === 'CPU' ? 
+                                  "Look for processes consuming high CPU" : 
+                                  ($threshold->metric_type === 'RAM' ? 
+                                      "Check for memory leaks or applications using excessive memory" : 
+                                      ($threshold->metric_type === 'Disk' ? 
+                                          "Consider cleaning up disk space or expanding storage" : 
+                                          "Review system load and running processes"))
+                              ) . "</li>" .
+                              "<li>Access the ServerPulse dashboard for more detailed metrics</li>" .
+                              "</ul></div>" .
+                              
+                              "<div style='margin-top: 30px; padding-top: 15px; border-top: 1px solid #eee;'>" .
+                              "<p style='margin-top: 0; color: #666; font-size: 13px;'>This is an automated notification from your ServerPulse monitoring system.</p>" .
+                              "<p style='color: #666; font-size: 12px;'>Alert notifications are limited to one per minute per alert condition. Additional alerts may not trigger new emails during this period.</p>" .
+                              "</div>" .
+                              "</div></body></html>",
+                    'h:X-Mailgun-Variables' => json_encode(['server_id' => $alert->server_id]),
+                    'h:Reply-To' => 'no-reply@serverpulse.com', 
+                    'h:List-Unsubscribe' => '<mailto:unsubscribe@serverpulse.com?subject=unsubscribe>',
+                    'h:Precedence' => 'bulk',
+                    'h:Auto-Submitted' => 'auto-generated',
+                    'o:tag' => ['monitoring', 'serverpulse']
+                ]);
+                $result = curl_exec($ch);
+                $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                curl_close($ch);
+                
+                Log::info('Direct API email attempt', [
+                    'to' => $email,
+                    'result' => $result,
+                    'http_code' => $httpCode
+                ]);
             }
         } catch (\Exception $e) {
             Log::error('Failed to send alert notifications', [
                 'alert_id' => $alert->id,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
             ]);
         }
     }
