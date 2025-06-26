@@ -113,7 +113,7 @@ class MonitorServer extends Command
                 'cpu_usage' => floatval($server->cpu_usage),
                 'ram_usage' => floatval($server->ram_usage),
                 'disk_usage' => floatval($server->disk_usage),
-                'status' => $server->status,
+                'status' => $metrics['status'], // Use metrics status directly
                 'system_uptime' => $server->system_uptime,
                 'last_down_at' => $server->last_down_at?->toDateTimeString(),
                 'current_uptime' => $server->running_since ? intval($server->running_since->diffInSeconds(now())) : null,
@@ -130,6 +130,7 @@ class MonitorServer extends Command
             
             // Log detailed information about network data types and values
             $this->info("Broadcasting server status for {$server->name} (ID: {$server->id}):");
+            $this->info("Status = {$payload['status']} (from metrics)");
             $this->info("network_rx = {$payload['network_rx']} (type: " . gettype($payload['network_rx']) . ")");
             $this->info("network_tx = {$payload['network_tx']} (type: " . gettype($payload['network_tx']) . ")");
             $this->info("disk_io_read = {$payload['disk_io_read']} (type: " . gettype($payload['disk_io_read']) . ")");

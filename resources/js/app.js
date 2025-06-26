@@ -396,14 +396,23 @@ function updateServersPage(eventData) {
         if (statusCell) {
             const statusBadge = statusCell.querySelector('.status-badge');
             if (statusBadge) {
-                if (eventData.status === 'online') {
+                // Force status update with visual feedback
+                const newStatus = eventData.status === 'online' ? 'online' : 'offline';
+                if (newStatus === 'online') {
                     statusBadge.className = 'status-badge inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800';
                     statusBadge.innerHTML = '<span class="w-2 h-2 bg-green-400 rounded-full mr-1"></span>Online';
+                    
+                    // Add visual feedback for status change
+                    statusBadge.style.transition = 'all 0.3s ease';
+                    statusBadge.style.transform = 'scale(1.1)';
+                    setTimeout(() => {
+                        statusBadge.style.transform = 'scale(1)';
+                    }, 300);
                 } else {
                     statusBadge.className = 'status-badge inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800';
                     statusBadge.innerHTML = '<span class="w-2 h-2 bg-red-400 rounded-full mr-1"></span>Offline';
                 }
-                console.log('✅ Updated Status to:', eventData.status);
+                console.log('✅ Updated Status to:', newStatus, '(forced update)');
             }
             
             // Update Uptime/Downtime in status column (servers page) with improved handling

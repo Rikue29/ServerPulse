@@ -213,6 +213,11 @@ Write-Output "$cpu|$memory|$disk|$uptime|$network|$diskIO"
                     $server->save();
                 }
                 $metrics['current_uptime'] = $server->running_since ? now()->diffInSeconds($server->running_since) : null;
+                
+                // Force status to online since we successfully got metrics
+                $server->status = 'online';
+                $metrics['status'] = 'online';
+                $server->save();
             } else {
                 if ($wasOnline || !$server->last_down_at) {
                     $server->last_down_at = now();
