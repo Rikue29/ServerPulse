@@ -18,6 +18,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Dashboard (Livewire Component)
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
     
+    // Test route for Livewire debugging
+    Route::get('/test-livewire', function() {
+        return view('test-livewire');
+    })->name('test-livewire');
+    
     // Server Management Routes
     Route::resource('servers', ServerController::class);
     

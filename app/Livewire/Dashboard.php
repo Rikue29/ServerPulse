@@ -104,40 +104,77 @@ class Dashboard extends Component
         $this->dispatch('serverChanged', serverId: $this->selectedServerId);
     }
 
-   public function toggleServerSelection($serverId)
-{
-    $serverId = (int) $serverId;
-
-    if (!is_array($this->selectedServers)) {
-        $this->selectedServers = [];
+    public function toggleServerSelection($serverId)
+    {
+        // Immediate debugging - this should appear in logs immediately
+        \Log::info('=== toggleServerSelection METHOD CALLED ===', [
+            'serverId' => $serverId,
+            'timestamp' => now()->toISOString(),
+            'memory_usage' => memory_get_usage(true)
+        ]);
+        
+        \Log::info('toggleServerSelection called', [
+            'serverId' => $serverId,
+            'serverIdType' => gettype($serverId),
+            'currentSelectedServers' => $this->selectedServers,
+            'currentSelectedServersTypes' => array_map('gettype', $this->selectedServers),
+            'isCurrentlySelected' => in_array($serverId, $this->selectedServers),
+            'timestamp' => now()->toISOString()
+        ]);
+        
+        // Convert to array if it's not already
+        if (!is_array($this->selectedServers)) {
+            $this->selectedServers = [];
+        }
+        
+        // Convert serverId to integer for consistent comparison
+        $serverId = (int) $serverId;
+        
+        // Convert all selected servers to integers for consistent comparison
+        $this->selectedServers = array_map('intval', $this->selectedServers);
+        
+        if (in_array($serverId, $this->selectedServers)) {
+            // Remove server from selection
+            $this->selectedServers = array_values(array_diff($this->selectedServers, [$serverId]));
+            \Log::info('Server removed from selection', ['serverId' => $serverId, 'newSelection' => $this->selectedServers]);
+        } else {
+            // Add server to selection
+            $this->selectedServers[] = $serverId;
+            \Log::info('Server added to selection', ['serverId' => $serverId, 'newSelection' => $this->selectedServers]);
+        }
+        
+        // Update selectedServerId for backward compatibility
+        if (count($this->selectedServers) === 1) {
+            $this->selectedServerId = $this->selectedServers[0];
+        } elseif (count($this->selectedServers) > 1) {
+            $this->selectedServerId = 'multiple';
+        } else {
+            $this->selectedServerId = null;
+        }
+        
+        // Store selections in session
+        session(['selected_servers' => $this->selectedServers]);
+        session(['selected_server_id' => $this->selectedServerId]);
+        
+        \Log::info('Selection updated', [
+            'selectedServers' => $this->selectedServers,
+            'selectedServerId' => $this->selectedServerId,
+            'selectedServersCount' => count($this->selectedServers),
+            'totalServers' => Server::count()
+        ]);
+        
+        // Force a re-render to ensure the view updates
+        $this->dispatch('$refresh');
+        
+        // Show an alert to confirm the method was called
+        $this->dispatch('showAlert', message: 'Server ' . $serverId . ' toggled. Selected: ' . json_encode($this->selectedServers));
+        
+        \Log::info('=== toggleServerSelection METHOD COMPLETED ===', [
+            'serverId' => $serverId,
+            'finalSelectedServers' => $this->selectedServers,
+            'timestamp' => now()->toISOString()
+        ]);
     }
-
-    $this->selectedServers = array_map('intval', $this->selectedServers);
-
-    if (in_array($serverId, $this->selectedServers)) {
-        $this->selectedServers = array_values(array_diff($this->selectedServers, [$serverId]));
-    } else {
-        $this->selectedServers[] = $serverId;
-    }
-
-    if (count($this->selectedServers) === 1) {
-        $this->selectedServerId = $this->selectedServers[0];
-    } elseif (count($this->selectedServers) > 1) {
-        $this->selectedServerId = 'multiple';
-    } else {
-        $this->selectedServerId = null;
-    }
-
-    // ✅ Now update the list after the selection is final
-    $this->selectedServersList = Server::whereIn('id', $this->selectedServers)->get();
-
-    session(['selected_servers' => $this->selectedServers]);
-    session(['selected_server_id' => $this->selectedServerId]);
-
-    $this->dispatch('serverSelectionChanged', selectedServers: $this->selectedServers);
-    $this->dispatch('chartDataUpdated');
-}
-
 
     public function selectAllServers()
     {
@@ -277,10 +314,27 @@ class Dashboard extends Component
 
     public function getSelectedServerProperty()
     {
+        \Log::info('getSelectedServerProperty called', [
+            'selectedServerId' => $this->selectedServerId,
+            'selectedServerIdType' => gettype($this->selectedServerId),
+            'timestamp' => now()->toISOString()
+        ]);
+        
         if (!$this->selectedServerId || $this->selectedServerId === 'all' || $this->selectedServerId === 'multiple') {
+            \Log::info('getSelectedServerProperty returning null', [
+                'reason' => !$this->selectedServerId ? 'no selectedServerId' : 'selectedServerId is ' . $this->selectedServerId
+            ]);
             return null;
         }
-        return Server::find($this->selectedServerId);
+        
+        $server = Server::find($this->selectedServerId);
+        \Log::info('getSelectedServerProperty found server', [
+            'serverId' => $this->selectedServerId,
+            'serverFound' => $server ? 'yes' : 'no',
+            'serverName' => $server ? $server->name : 'null'
+        ]);
+        
+        return $server;
     }
 
     public function getSelectedServersListProperty()
@@ -309,6 +363,13 @@ class Dashboard extends Component
     // Server Performance Chart Data
     public function getServerPerformanceChartDataProperty()
     {
+        // Temporarily disable chart functionality to test server selection
+        \Log::info('Chart data requested but temporarily disabled for testing');
+        return [
+            'labels' => [],
+            'datasets' => []
+        ];
+        
         if (empty($this->selectedServers)) {
             \Log::info('No servers selected, returning empty chart data');
             return [
@@ -624,6 +685,13 @@ class Dashboard extends Component
         
         \Log::info('testMethod called successfully!');
         $this->dispatch('testEvent', 'Test method works!');
+        
+        // Also test the selectedServers property
+        \Log::info('Current selectedServers:', [
+            'selectedServers' => $this->selectedServers,
+            'count' => count($this->selectedServers),
+            'types' => array_map('gettype', $this->selectedServers)
+        ]);
     }
 
     public function simpleTest()
@@ -634,8 +702,12 @@ class Dashboard extends Component
 
     public function verySimpleTest()
     {
-        \Log::info('verySimpleTest called - just logging');
-        // No emit, just logging
+        \Log::info('=== verySimpleTest CALLED ===', [
+            'timestamp' => now()->toISOString()
+        ]);
+        
+        // Just log and show an alert
+        $this->dispatch('showAlert', message: 'Very simple test works!');
     }
 
     public function changeTestProperty()
@@ -702,18 +774,17 @@ class Dashboard extends Component
     }
 
     public function updatedSelectedServers()
-{
-    \Log::info('selectedServers updated', ['data' => $this->selectedServers]);
+    {
+        \Log::info('selectedServers updated', ['data' => $this->selectedServers]);
 
-    // Fix: Always refetch the list based on latest selectedServers
-    $this->selectedServersList = Server::whereIn('id', $this->selectedServers)->get();
+        // Fix: Always refetch the list based on latest selectedServers
+        $this->selectedServersList = Server::whereIn('id', $this->selectedServers)->get();
 
-    \Log::info('Refreshed selectedServersList', [
-        'count' => $this->selectedServersList->count(),
-        'ids' => $this->selectedServersList->pluck('id')->toArray()
-    ]);
-}
-
+        \Log::info('Refreshed selectedServersList', [
+            'count' => $this->selectedServersList->count(),
+            'ids' => $this->selectedServersList->pluck('id')->toArray()
+        ]);
+    }
 
     public function testAddServer($serverId = 1)
     {

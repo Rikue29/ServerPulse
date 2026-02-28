@@ -34,7 +34,8 @@ class PerformanceLog extends Model
         'disk_io_read' => 'integer',
         'disk_io_write' => 'integer',
         'response_time' => 'float',
-        'response_time' => 'float',
+        'created_at' => 'datetime',
+        'updated_at' => 'datetime',
     ];
 
     public function server()

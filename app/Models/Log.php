@@ -7,17 +7,20 @@ use Illuminate\Database\Eloquent\Model;
 
 class Log extends Model
 {
-    use HasFactory;    protected $fillable = [
+    use HasFactory;
+    
+    protected $table = 'logs';
+    
+    protected $fillable = [
         'server_id',
-        'level',
         'source',
         'log_level',
         'message',
-        'context',
     ];
 
     protected $casts = [
-        'context' => 'array',
+        'created_at' => 'datetime',
+        'updated_at' => 'datetime',
     ];
 
     public function server()

@@ -93,7 +93,10 @@
                     <h3 class="text-lg font-semibold text-gray-900">
                         System Health: 
                         @if(count($selectedServers) === 1)
-                            {{ $selectedServersList->first()->name ?? 'Selected Server' }}
+                            @php
+                                $selectedServer = $this->selectedServer;
+                            @endphp
+                            {{ $selectedServer ? $selectedServer->name : 'Selected Server' }}
                         @elseif(count($selectedServers) === $servers->count())
                             All Servers (Average)
                         @else
@@ -109,9 +112,14 @@
                 </div>
                 <div class="flex items-center space-x-2">
                     @if(count($selectedServers) === 1)
-                        <span class="text-xs px-2 py-1 rounded-full {{ $selectedServersList->first()->status === 'online' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800' }}">
-                        {{ ucfirst($selectedServersList->first()->status) }}
-                        </span>
+                        @php
+                            $selectedServer = $this->selectedServer;
+                        @endphp
+                        @if($selectedServer)
+                            <span class="text-xs px-2 py-1 rounded-full {{ $selectedServer->status === 'online' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800' }}">
+                                {{ ucfirst($selectedServer->status) }}
+                            </span>
+                        @endif
                     @else
                         @php
                             $selectedServerList = $this->selectedServersList;
@@ -137,11 +145,10 @@
             </div>
         </div>
         <div class="p-6">
-            <!-- Hidden chart data for JavaScript -->
-            <div data-chart-data style="display: none;">{{ json_encode($serverPerformanceChartData) }}</div>
-            
-            <div style="height: 300px; width: 100%;">
-                <canvas id="serverPerformanceChart"></canvas>
+            <!-- Chart temporarily disabled for testing -->
+            <div class="text-center p-8">
+                <i class="fas fa-chart-line text-gray-400 text-4xl mb-4"></i>
+                <p class="text-gray-500">Chart functionality temporarily disabled for server selection testing.</p>
             </div>
         </div>
     </div>
@@ -170,7 +177,27 @@
             <p class="text-gray-500">Charts are currently disabled. Click "Enable Charts" to view server performance data.</p>
         </div>
     </div>
-
+    @else
+    <!-- Debug Information - Remove this after testing -->
+    <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-8">
+        <div class="flex">
+            <div class="flex-shrink-0">
+                <i class="fas fa-exclamation-triangle text-yellow-400"></i>
+            </div>
+            <div class="ml-3">
+                <h3 class="text-sm font-medium text-yellow-800">Chart Debug Info</h3>
+                <div class="mt-2 text-sm text-yellow-700">
+                    <p>showCharts: {{ $showCharts ? 'true' : 'false' }}</p>
+                    <p>selectedServerId: {{ $selectedServerId ?? 'null' }}</p>
+                    @php
+                        $selectedServer = $this->selectedServer;
+                    @endphp
+                    <p>selectedServer: {{ $selectedServer ? $selectedServer->name : 'null' }}</p>
+                    <p>Total servers: {{ $servers->count() }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
     @endif
 
     <!-- Server List Section -->
@@ -185,6 +212,9 @@
                     </div>
                     <button wire:click="testMethod" class="px-3 py-1 text-xs bg-red-100 text-red-600 rounded hover:bg-red-200" onclick="console.log('Test button clicked!')">
                         Test Livewire
+                    </button>
+                    <button wire:click="verySimpleTest" class="px-3 py-1 text-xs bg-indigo-100 text-indigo-600 rounded hover:bg-indigo-200">
+                        Very Simple Test
                     </button>
                     <button wire:click="selectAllServers" class="px-3 py-1 text-xs bg-blue-100 text-blue-600 rounded hover:bg-blue-200">
                         Select All
@@ -272,39 +302,12 @@
 <!-- Chart.js Script -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-// Test if Chart.js is loaded
-console.log('Chart.js loaded:', typeof Chart !== 'undefined');
-if (typeof Chart !== 'undefined') {
-    console.log('Chart.js version:', Chart.version);
-} else {
-    console.error('Chart.js is not loaded!');
-}
+// Chart functionality temporarily disabled for server selection testing
+console.log('Chart functionality disabled for testing server selection');
 
-document.addEventListener('livewire:load', function () {
-    console.log('Livewire loaded, initializing charts...');
-    console.log('Chart.js available:', typeof Chart !== 'undefined');
-    console.log('Livewire object:', Livewire);
-    
-    // Check if our component is loaded
-    const components = Livewire.components;
-    console.log('Livewire components:', components);
-    
-    // Don't create charts here since livewire:load isn't firing properly
-    // Charts will be created by the fallback code
-});
-
-// Also listen for component initialization
-document.addEventListener('livewire:init', function () {
-    console.log('Livewire init event fired');
-});
-
-document.addEventListener('livewire:update', function () {
-    console.log('Livewire update event fired');
-});
-
-// Fallback initialization if livewire:load doesn't fire
+// Only keep the Livewire debugging functionality
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('DOMContentLoaded fallback - checking if charts need initialization...');
+    console.log('DOMContentLoaded - Chart functionality disabled for testing');
     console.log('Livewire available:', typeof Livewire !== 'undefined');
     
     // Test if Livewire is working
@@ -322,10 +325,6 @@ document.addEventListener('DOMContentLoaded', function() {
         console.error('Livewire is not loaded!');
     }
     
-    // Global chart instances to prevent multiple creation
-    window.testChartInstance = null;
-    window.performanceChartInstance = null;
-    
     // Debug: Check if checkboxes exist
     const checkboxes = document.querySelectorAll('input[type="checkbox"][wire\\:click*="toggleServerSelection"]');
     console.log('Found checkboxes:', checkboxes.length);
@@ -338,26 +337,6 @@ document.addEventListener('DOMContentLoaded', function() {
     console.log('Found server filter divs:', serverFilterDivs.length);
     serverFilterDivs.forEach((div, index) => {
         console.log(`Server filter div ${index}:`, div.getAttribute('wire:click'));
-    });
-    
-    // Store server selection when it changes
-    document.addEventListener('change', function(e) {
-        // Listen for time range changes
-        if (e.target.matches('select[wire\\:model="selectedTimeRange"]')) {
-            const timeRange = e.target.value;
-            console.log('Time range changed to:', timeRange);
-            
-            // Force multiple updates to ensure chart data is refreshed
-            setTimeout(updatePerformanceChart, 100);
-            setTimeout(updatePerformanceChart, 500);
-            setTimeout(updatePerformanceChart, 1000);
-        }
-        
-        // Listen for checkbox changes
-        if (e.target.matches('input[type="checkbox"][wire\\:click*="toggleServerSelection"]')) {
-            console.log('Checkbox change event:', e.target);
-            console.log('New checked state:', e.target.checked);
-        }
     });
     
     // Debug: Listen for all clicks to see if checkboxes are being clicked
@@ -398,146 +377,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
     
-    function updatePerformanceChart() {
-        console.log('Updating performance chart...');
-        const perfCanvas = document.getElementById('serverPerformanceChart');
-        if (!perfCanvas) {
-            console.log('Performance canvas not found');
-            return;
-        }
-        
-        // Destroy existing chart if it exists
-        if (window.performanceChartInstance) {
-            window.performanceChartInstance.destroy();
-            window.performanceChartInstance = null;
-        }
-        
-        // Get updated chart data from the page
-        const chartDataElement = document.querySelector('[data-chart-data]');
-        if (chartDataElement) {
-            try {
-                const chartData = JSON.parse(chartDataElement.textContent);
-                console.log('Updated chart data:', chartData);
-                console.log('Labels:', chartData.labels);
-                console.log('Number of data points:', chartData.labels ? chartData.labels.length : 0);
-                
-                // Check if we have valid data
-                if (!chartData.labels || chartData.labels.length === 0) {
-                    console.log('No labels found, waiting for data...');
-                    setTimeout(updatePerformanceChart, 500);
-                    return;
-                }
-                
-                const perfCtx = perfCanvas.getContext('2d');
-                window.performanceChartInstance = new Chart(perfCtx, {
-                    type: 'bar',
-                    data: {
-                        labels: chartData.labels || [],
-                        datasets: chartData.datasets || []
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: {
-                            legend: {
-                                position: 'top'
-                            }
-                        },
-                        scales: {
-                            y: {
-                                beginAtZero: true,
-                                max: 100,
-                                ticks: {
-                                    callback: function(value) {
-                                        return value + '%';
-                                    }
-                                }
-                            }
-                        },
-                        interaction: {
-                            intersect: false,
-                            mode: 'index'
-                        }
-                    }
-                });
-                console.log('Performance chart updated successfully');
-            } catch (error) {
-                console.error('Error parsing chart data:', error);
-            }
-        } else {
-            console.log('No chart data element found');
-        }
-    }
-    
-    // Add manual refresh function for debugging
-    window.refreshChart = function() {
-        console.log('Manual chart refresh triggered');
-        updatePerformanceChart();
-    };
-    
-    function createTestChart() {
-        const testCanvas = document.getElementById('testChart');
-        if (testCanvas && !window.testChartInstance) {
-            console.log('Creating test chart...');
-            
-            // Destroy existing chart if it exists
-            if (window.testChartInstance) {
-                window.testChartInstance.destroy();
-            }
-            
-            // Create test chart
-            const testCtx = testCanvas.getContext('2d');
-            window.testChartInstance = new Chart(testCtx, {
-                type: 'bar',
-                data: {
-                    labels: ['Test 1', 'Test 2', 'Test 3'],
-                    datasets: [{
-                        label: 'Test Data',
-                        data: [10, 20, 30],
-                        backgroundColor: 'rgba(54, 162, 235, 0.2)',
-                        borderColor: 'rgba(54, 162, 235, 1)',
-                        borderWidth: 1
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                        y: {
-                            beginAtZero: true
-                        }
-                    }
-                }
-            });
-            console.log('Test chart created successfully');
-        }
-    }
-    
-    // Initial chart creation
-    setTimeout(function() {
-        createTestChart();
-        updatePerformanceChart();
-    }, 1000);
-    
-    // Watch for changes in the chart data element
-    const chartDataElement = document.querySelector('[data-chart-data]');
-    if (chartDataElement) {
-        const observer = new MutationObserver(function(mutations) {
-            mutations.forEach(function(mutation) {
-                if (mutation.type === 'childList' || mutation.type === 'characterData') {
-                    console.log('Chart data changed, updating performance chart...');
-                    setTimeout(updatePerformanceChart, 100);
-                }
-            });
-        });
-        
-        observer.observe(chartDataElement, {
-            childList: true,
-            characterData: true,
-            subtree: true
-        });
-    }
-    
     // Also listen for Livewire events if available
     if (typeof Livewire !== 'undefined') {
         // Add debugging hooks for Livewire requests
@@ -563,72 +402,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 component: component.fingerprint.name,
                 timestamp: new Date().toISOString()
             });
-            if (component.fingerprint.name === 'dashboard') {
-                console.log('Dashboard component updated, checking for chart updates...');
-                setTimeout(updatePerformanceChart, 100);
-            }
-        });
-        
-        // Hook into element updates for automatic chart refresh
-        Livewire.hook('element.updated', (el, component) => {
-            console.log('Element updated:', el);
-            if (el.querySelector('[data-chart-data]')) {
-                console.log('Chart data element updated, refreshing chart...');
-                setTimeout(updatePerformanceChart, 100);
-            }
-        });
-        
-        // Listen for serverChanged event
-        Livewire.on('serverChanged', function(serverId) {
-            console.log('Server changed to:', serverId);
-            setTimeout(updatePerformanceChart, 200);
-        });
-        
-        // Listen for serverSelectionChanged event
-        Livewire.on('serverSelectionChanged', function(selectedServers) {
-            console.log('Server selection changed:', selectedServers);
-            // Update chart immediately
-            setTimeout(updatePerformanceChart, 100);
-            // Force view update
-            setTimeout(() => {
-                console.log('Forcing view update...');
-                updatePerformanceChart();
-            }, 300);
-        });
-        
-        // Listen for chartDataUpdated event
-        Livewire.on('chartDataUpdated', function() {
-            console.log('Chart data updated event received');
-            setTimeout(updatePerformanceChart, 100);
-            setTimeout(updatePerformanceChart, 500);
-        });
-        
-        // Listen for timeRangeChanged event
-        Livewire.on('timeRangeChanged', function(timeRange) {
-            console.log('Time range changed to:', timeRange);
-            // Force multiple updates to ensure chart data is refreshed
-            setTimeout(updatePerformanceChart, 100);
-            setTimeout(updatePerformanceChart, 500);
-            setTimeout(updatePerformanceChart, 1000);
-        });
-        
-        // Listen for chartDataRegenerated event
-        Livewire.on('chartDataRegenerated', function(timeRange) {
-            console.log('Chart data regenerated for time range:', timeRange);
-            setTimeout(updatePerformanceChart, 200);
-        });
-        
-        // Listen for serverCardsUpdated event
-        Livewire.on('serverCardsUpdated', function(selectedServers) {
-            console.log('Server cards updated event received:', selectedServers);
-            // Force a view refresh
-            setTimeout(() => {
-                console.log('Forcing view refresh for server cards...');
-                // Trigger a Livewire refresh
-                if (typeof Livewire !== 'undefined') {
-                    Livewire.find(document.querySelector('[wire\\:id]')?.getAttribute('wire:id')).call('$refresh');
-                }
-            }, 100);
         });
         
         // Listen for test event
